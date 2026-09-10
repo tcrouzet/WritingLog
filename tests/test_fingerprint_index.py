@@ -29,16 +29,16 @@ class FingerprintIndexTest(unittest.TestCase):
             text = " ".join(f"fragment-{index}" for index in range(200))
             hashes = winnowed_hashes(text, 36, 180)
             with FingerprintIndex(database_path, reset=True) as index:
-                index.update_file(
+                index.update_file_delta(
                     None,
                     "Alpha/manuscrit/source.md",
                     "Alpha",
                     "commit-1",
                     hashes,
-                    hashes,
+                    [],
                 )
                 index.commit("commit-1")
-                index.update_file(
+                index.update_file_delta(
                     "Alpha/manuscrit/source.md",
                     None,
                     "Alpha",
@@ -47,10 +47,18 @@ class FingerprintIndexTest(unittest.TestCase):
                     [],
                 )
                 index.commit("commit-2")
+                statements: list[str] = []
+                index.connection.set_trace_callback(statements.append)
                 known, sources = index.original_sources(hashes)
+                index.connection.set_trace_callback(None)
                 self.assertEqual(known, set(hashes))
-                self.assertEqual(sources[0]["file"], "Alpha/manuscrit/source.md")
-                self.assertEqual(sources[0]["commit"], "commit-1")
+                self.assertEqual(
+                    len([statement for statement in statements if statement.startswith("SELECT")]),
+                    2,
+                )
+                source = sources[next(iter(known))]
+                self.assertEqual(source[1], "Alpha/manuscrit/source.md")
+                self.assertEqual(source[2], "commit-1")
 
             database = sqlite3.connect(database_path)
             try:
@@ -68,7 +76,7 @@ class FingerprintIndexTest(unittest.TestCase):
                 query_plan = " ".join(
                     str(column)
                     for row in database.execute(
-                        "EXPLAIN QUERY PLAN SELECT hash FROM fingerprints WHERE hash IN (?, ?)",
+                        "EXPLAIN QUERY PLAN SELECT DISTINCT hash FROM fingerprints WHERE hash IN (?, ?)",
                         hashes[:2],
                     )
                     for column in row

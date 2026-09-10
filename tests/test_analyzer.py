@@ -415,7 +415,7 @@ output_dir: site
         row = next(item for item in self.load("daily.json") if item["projet"] == "Alpha")
         self.assertEqual(row["signes_supprimes"], 4)
 
-    def test_edited_move_is_classified_from_whole_block_ratio(self) -> None:
+    def test_edited_move_reuses_index_and_keeps_new_delta_as_production(self) -> None:
         old_folder = self.vault / "Alpha" / "ancienne-version"
         old_folder.mkdir(parents=True)
         source = " ".join(f"ancien{index}" for index in range(80))
@@ -432,12 +432,8 @@ output_dir: site
 
         self.analyze("full")
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
-        self.assertEqual(project["signes_reels_total"], len(source))
+        self.assertEqual(project["signes_reels_total"], len(source) + len(addition))
         self.assertEqual(project["taille_actuelle"], len(source + addition))
-        state = self.load("state.json")
-        move = next(event for event in state["events"] if event["commit"] == state["last_commit"])
-        self.assertEqual(move["internal_chars"], len(source + addition))
-        self.assertGreaterEqual(move["duplication_sources"][0]["overlap_ratio"], 0.85)
 
     def test_compiled_file_from_existing_chapters_is_internal_duplication(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"

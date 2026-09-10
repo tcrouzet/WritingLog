@@ -11,7 +11,7 @@ import unicodedata
 from typing import Iterable
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SPACE_RE = re.compile(r"\s+", re.UNICODE)
 
 
@@ -96,6 +96,7 @@ class FingerprintIndex:
                 file TEXT NOT NULL,
                 hash TEXT NOT NULL,
                 project TEXT NOT NULL,
+                occurrences INTEGER NOT NULL,
                 PRIMARY KEY(file, hash)
             );
             CREATE TABLE IF NOT EXISTS metadata (
@@ -123,13 +124,16 @@ class FingerprintIndex:
             (key, value),
         )
 
-    @staticmethod
-    def _chunks(values: list[str], size: int = 500) -> Iterable[list[str]]:
+    def _chunks(self, values: list[str], size: int | None = None) -> Iterable[list[str]]:
+        if size is None:
+            size = max(1, self.connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) - 10)
         for start in range(0, len(values), size):
             yield values[start : start + size]
 
-    def original_sources(self, hashes: list[str]) -> tuple[set[str], list[dict]]:
-        """Retourne les hashes connus et leur toute première provenance."""
+    def original_sources(
+        self, hashes: list[str]
+    ) -> tuple[set[str], dict[str, tuple[str, str, str]]]:
+        """Retourne en une paire de requêtes les hashes et leurs origines."""
         unique = list(dict.fromkeys(hashes))
         known: set[str] = set()
         # La décision de recouvrement ne charge aucune provenance inutile :
@@ -139,7 +143,7 @@ class FingerprintIndex:
             known.update(
                 row[0]
                 for row in self.connection.execute(
-                    f"SELECT hash FROM fingerprints WHERE hash IN ({placeholders})",
+                    f"SELECT DISTINCT hash FROM fingerprints WHERE hash IN ({placeholders})",
                     chunk,
                 )
             )
@@ -154,35 +158,25 @@ class FingerprintIndex:
             )
             for fingerprint, project, file_path, commit_hash in rows:
                 first.setdefault(fingerprint, (project, file_path, commit_hash))
-        counts: Counter[tuple[str, str, str]] = Counter()
-        for fingerprint in hashes:
-            source = first.get(fingerprint)
-            if source:
-                counts[source] += 1
-        sources = [
-            {
-                "project": project,
-                "file": file_path,
-                "commit": commit_hash,
-                "matching_hashes": count,
-            }
-            for (project, file_path, commit_hash), count in counts.most_common()
-        ]
-        return known, sources
+        return known, first
 
-    def update_file(
+    def update_file_delta(
         self,
         old_path: str | None,
         new_path: str | None,
         project: str | None,
         commit_sha: str,
-        current_hashes: Iterable[str],
-        introduced_hashes: Iterable[str],
+        added_hashes: Iterable[str],
+        removed_hashes: Iterable[str],
     ) -> None:
-        """Met à jour une seule filiation de fichier, sans effacer son passé."""
+        """Applique uniquement les fingerprints ajoutés/retirés à un fichier."""
         old_file = old_path
         new_file = new_path
         if old_file and old_file != new_file:
+            active_rows = list(self.connection.execute(
+                "SELECT hash, occurrences FROM active_file_hashes WHERE file = ?",
+                (old_file,),
+            ))
             self.connection.execute(
                 "UPDATE fingerprints SET removed_at_commit = ? "
                 "WHERE file = ? AND removed_at_commit IS NULL",
@@ -191,6 +185,20 @@ class FingerprintIndex:
             self.connection.execute(
                 "DELETE FROM active_file_hashes WHERE file = ?", (old_file,)
             )
+            if new_file:
+                self.connection.executemany(
+                    "INSERT INTO active_file_hashes(file, hash, project, occurrences) "
+                    "VALUES(?, ?, ?, ?) ON CONFLICT(file, hash) DO UPDATE SET "
+                    "project = excluded.project, "
+                    "occurrences = active_file_hashes.occurrences + excluded.occurrences",
+                    ((new_file, value, project or "", count) for value, count in active_rows),
+                )
+                self.connection.executemany(
+                    "INSERT INTO fingerprints"
+                    "(hash, project, file, commit_hash, removed_at_commit) "
+                    "VALUES(?, ?, ?, ?, NULL)",
+                    ((value, project or "", new_file, commit_sha) for value, _ in active_rows),
+                )
 
         if not new_file:
             if old_file:
@@ -204,46 +212,44 @@ class FingerprintIndex:
                 )
             return
 
-        current = set(current_hashes)
+        added = Counter(added_hashes)
+        removed = Counter(removed_hashes)
+        changed = set(added) | set(removed)
         active = {
-            str(row[0])
+            row[0]: int(row[1])
+            for chunk in self._chunks(list(changed))
             for row in self.connection.execute(
-                "SELECT hash FROM active_file_hashes WHERE file = ?", (new_file,)
-            )
-        }
-        disappeared = active - current
-        for chunk in self._chunks(list(disappeared)):
-            placeholders = ",".join("?" for _ in chunk)
-            self.connection.execute(
-                f"UPDATE fingerprints SET removed_at_commit = ? WHERE file = ? "
-                f"AND removed_at_commit IS NULL AND hash IN ({placeholders})",
-                [commit_sha, new_file, *chunk],
-            )
-            self.connection.execute(
-                f"DELETE FROM active_file_hashes WHERE file = ? "
-                f"AND hash IN ({placeholders})",
+                f"SELECT hash, occurrences FROM active_file_hashes WHERE file = ? "
+                f"AND hash IN ({','.join('?' for _ in chunk)})",
                 [new_file, *chunk],
             )
-
-        # Les fingerprints introduits par le bloc obtiennent toujours une
-        # nouvelle provenance, quelle que soit sa classification.
-        to_record = set(introduced_hashes) | (current - active)
-        existing = {
-            row[0]
-            for row in self.connection.execute(
-                "SELECT hash FROM fingerprints WHERE file = ? AND commit_hash = ?",
-                (new_file, commit_sha),
-            )
         }
+        for value in changed:
+            count = active.get(value, 0) + added[value] - removed[value]
+            if count > 0:
+                self.connection.execute(
+                    "INSERT INTO active_file_hashes(file, hash, project, occurrences) "
+                    "VALUES(?, ?, ?, ?) ON CONFLICT(file, hash) DO UPDATE SET "
+                    "project = excluded.project, occurrences = excluded.occurrences",
+                    (new_file, value, project or "", count),
+                )
+            else:
+                self.connection.execute(
+                    "DELETE FROM active_file_hashes WHERE file = ? AND hash = ?",
+                    (new_file, value),
+                )
+                self.connection.execute(
+                    "UPDATE fingerprints SET removed_at_commit = ? WHERE file = ? "
+                    "AND hash = ? AND removed_at_commit IS NULL",
+                    (commit_sha, new_file, value),
+                )
+
+        # Tous les fingerprints ajoutés reçoivent la provenance courante,
+        # quelle que soit la classification du bloc.
         self.connection.executemany(
             "INSERT INTO fingerprints"
             "(hash, project, file, commit_hash, removed_at_commit) VALUES(?, ?, ?, ?, NULL)",
-            ((value, project or "", new_file, commit_sha) for value in to_record - existing),
-        )
-        self.connection.executemany(
-            "INSERT INTO active_file_hashes(file, hash, project) VALUES(?, ?, ?) "
-            "ON CONFLICT(file, hash) DO UPDATE SET project = excluded.project",
-            ((new_file, value, project or "") for value in current),
+            ((value, project or "", new_file, commit_sha) for value in added),
         )
 
     def commit(self, last_commit: str) -> None:

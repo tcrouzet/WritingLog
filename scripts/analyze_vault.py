@@ -36,7 +36,7 @@ from git_utils import (
 )
 
 
-STATE_VERSION = 19
+STATE_VERSION = 20
 
 
 def compact_duration(seconds: float) -> str:
@@ -551,6 +551,8 @@ def process_history_diff(
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
             touched_sizes: set[str] = set()
+            change_records: list[dict[str, Any]] = []
+            commit_added_hashes: list[str] = []
 
             for change in batch_changes.get(commit.sha, []):
                 old_path = change.old_path or (change.new_path if change.status != "A" else None)
@@ -586,50 +588,33 @@ def process_history_diff(
                     }
                     touched_sizes.add(new_current)
 
-                if change.status in {"A", "R", "C"}:
+                if change.status == "A":
                     added_parts, removed_parts = ([new_text] if new_text else []), []
                 elif change.status == "D":
                     added_parts, removed_parts = [], []
                 else:
                     added_parts, removed_parts = character_changes(old_text, new_text)
-
-                introduced_hashes: list[str] = []
-                if new_project:
-                    for part in added_parts:
-                        block_hashes = winnowed_hashes(part, gram_chars, selection_chars)
-                        introduced_hashes.extend(block_hashes)
-                        known, sources = fingerprints.original_sources(block_hashes)
-                        matched = sum(1 for value in block_hashes if value in known)
-                        ratio = matched / len(block_hashes) if block_hashes else 0.0
-                        if block_hashes and ratio >= overlap_threshold:
-                            work[new_project]["internal"] += len(part)
-                            work[new_project]["internal_hashes"].update(block_hashes)
-                            work[new_project]["sources"].append({
-                                "target_file": new_path,
-                                "characters": len(part),
-                                "matching_hashes": matched,
-                                "total_hashes": len(block_hashes),
-                                "overlap_ratio": round(ratio, 6),
-                                "origins": sources,
-                            })
-                        else:
-                            work[new_project]["novel"] += len(part)
-                    if removed_parts:
-                        work[old_project or new_project]["removed"].extend(removed_parts)
-
-                current_hashes = (
-                    winnowed_hashes(new_text, gram_chars, selection_chars)
-                    if new_md and new_path else []
+                added_blocks = [
+                    (part, winnowed_hashes(part, gram_chars, selection_chars))
+                    for part in added_parts
+                ]
+                removed_blocks = [
+                    (part, winnowed_hashes(part, gram_chars, selection_chars))
+                    for part in removed_parts
+                ]
+                commit_added_hashes.extend(
+                    value for _, block_hashes in added_blocks for value in block_hashes
                 )
-                index_project = fallback_project(new_path or old_path, new_project or old_project)
-                fingerprints.update_file(
-                    old_path if old_md else None,
-                    new_path if new_md else None,
-                    index_project,
-                    commit.sha,
-                    current_hashes,
-                    introduced_hashes,
-                )
+                change_records.append({
+                    "status": change.status,
+                    "old_path": old_path if old_md else None,
+                    "new_path": new_path if new_md else None,
+                    "old_project": old_project,
+                    "new_project": new_project,
+                    "index_project": fallback_project(new_path or old_path, new_project or old_project),
+                    "added_blocks": added_blocks,
+                    "removed_blocks": removed_blocks,
+                })
 
                 if old_project and change.status == "R" and new_path:
                     parts = PurePosixPath(new_path).parts
@@ -639,13 +624,69 @@ def process_history_diff(
                             "moved_at": commit.timestamp,
                         }
 
+            known_hashes, source_by_hash = fingerprints.original_sources(commit_added_hashes)
+            for record in change_records:
+                new_project = record["new_project"]
+                if new_project:
+                    for part, block_hashes in record["added_blocks"]:
+                        matched = sum(1 for value in block_hashes if value in known_hashes)
+                        ratio = matched / len(block_hashes) if block_hashes else 0.0
+                        if block_hashes and ratio >= overlap_threshold:
+                            work[new_project]["internal"] += len(part)
+                            work[new_project]["internal_hashes"].update(block_hashes)
+                            origin_counts: dict[tuple[str, str, str], int] = defaultdict(int)
+                            for value in block_hashes:
+                                source = source_by_hash.get(value)
+                                if source:
+                                    origin_counts[source] += 1
+                            origins = [
+                                {
+                                    "project": project,
+                                    "file": file_path,
+                                    "commit": source_commit,
+                                    "matching_hashes": count,
+                                }
+                                for (project, file_path, source_commit), count in sorted(
+                                    origin_counts.items(), key=lambda item: item[1], reverse=True
+                                )
+                            ]
+                            work[new_project]["sources"].append({
+                                "target_file": record["new_path"],
+                                "characters": len(part),
+                                "matching_hashes": matched,
+                                "total_hashes": len(block_hashes),
+                                "overlap_ratio": round(ratio, 6),
+                                "origins": origins,
+                            })
+                        else:
+                            work[new_project]["novel"] += len(part)
+                    if record["removed_blocks"] and record["status"] not in {"R", "C"}:
+                        target = record["old_project"] or new_project
+                        work[target]["removed"].extend(record["removed_blocks"])
+
+                fingerprints.update_file_delta(
+                    record["old_path"],
+                    record["new_path"],
+                    record["index_project"],
+                    commit.sha,
+                    (
+                        value
+                        for _, block_hashes in record["added_blocks"]
+                        for value in block_hashes
+                    ),
+                    (
+                        value
+                        for _, block_hashes in record["removed_blocks"]
+                        for value in block_hashes
+                    ),
+                )
+
             commit_internal_hashes = set().union(
                 *(values["internal_hashes"] for values in work.values())
             ) if work else set()
             for project, values in work.items():
                 removed_chars = 0
-                for part in values["removed"]:
-                    removed_hashes = winnowed_hashes(part, gram_chars, selection_chars)
+                for part, removed_hashes in values["removed"]:
                     overlap = (
                         sum(1 for value in removed_hashes if value in commit_internal_hashes)
                         / len(removed_hashes)

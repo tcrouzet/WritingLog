@@ -24,7 +24,7 @@ Cette formule ne possède pas de fondement permettant d’identifier la provenan
 
 La détection des déplacements reposait sur des blocs séparés par paragraphes, des ancres de quatre mots et une similarité calculée par `SequenceMatcher`. Elle ne constituait pas une filiation du texte : une réécriture pouvait casser les ancres, des formulations répétitives créer de faux rapprochements et un même passage copié plusieurs fois recevoir un crédit incohérent.
 
-La règle « fichier créé puis supprimé = fichier transitoire » pouvait écarter un véritable texte abandonné, tandis qu’un fichier de compilation conservé durablement échappait à la règle. Ces trois mécanismes ont été retirés de la version 19 au profit de l’index winnowé décrit plus bas.
+La règle « fichier créé puis supprimé = fichier transitoire » pouvait écarter un véritable texte abandonné, tandis qu’un fichier de compilation conservé durablement échappait à la règle. Ces trois mécanismes ont été retirés au profit de l’index winnowé décrit plus bas.
 
 ### Pourquoi les jours et les durées sont artificiels
 
@@ -36,7 +36,7 @@ Les suppressions négatives décrivent uniquement des caractères présents dans
 
 ### Conséquence
 
-Les JSON et graphiques ne permettent pas d’affirmer avec certitude combien de signes ont été écrits un jour donné ni combien d’heures ont été travaillées. La version 19 limite désormais la reconnaissance des déplacements à une trace textuelle vérifiable et exporte ses sources, mais la distinction écriture/import reste une inférence statistique.
+Les JSON et graphiques ne permettent pas d’affirmer avec certitude combien de signes ont été écrits un jour donné ni combien d’heures ont été travaillées. La méthode actuelle limite désormais la reconnaissance des déplacements à une trace textuelle vérifiable et exporte ses sources, mais la distinction écriture/import reste une inférence statistique.
 
 ## Commandes à utiliser
 
@@ -131,14 +131,16 @@ CREATE TABLE fingerprints (
 CREATE INDEX idx_hash ON fingerprints(hash);
 ```
 
-Quand un fichier change, seul ce fichier est relu et fingerprinté. L’index complet n’est jamais rechargé ni recalculé à chaque commit. Lorsqu’un fingerprint disparaît du fichier, sa ligne reste dans `fingerprints` et reçoit le commit dans `removed_at_commit`; elle peut donc identifier une réapparition future. Une petite table auxiliaire maintient uniquement la liste active des fingerprints par fichier.
+Quand un fichier change, son contenu complet sert uniquement à calculer le diff textuel. Le winnowing n’est appliqué qu’aux fragments `added_parts` et `removed_parts` produits par ce diff. Les fingerprints ajoutés incrémentent `active_file_hashes`; les fingerprints supprimés le décrémentent. Le contenu intégral n’est winnowé qu’à la première apparition du fichier, puisqu’il constitue alors lui-même l’unique fragment ajouté. Un renommage transfère directement les fingerprints actifs entre les deux chemins par SQL.
+
+L’index complet n’est jamais rechargé ni recalculé à chaque commit. Lorsqu’un fingerprint n’est plus actif dans un fichier, sa ligne historique reste dans `fingerprints` et reçoit le commit dans `removed_at_commit`; elle peut donc identifier une réapparition future. La table auxiliaire mémorise un compteur d’occurrences par couple fichier/hash afin qu’une suppression partielle ne fasse pas disparaître un fingerprint encore présent ailleurs dans le même fichier.
 
 ### 4. Les changements sont classés
 
-Pour chaque nouveau bloc, l’analyse interroge l’index par lots :
+Tous les fingerprints de tous les fragments ajoutés par un même commit sont d’abord réunis. L’analyse effectue ensuite une seule recherche de recouvrement pour le commit entier — une paire de requêtes dans la limite maximale de paramètres acceptée par SQLite — puis répartit en mémoire les résultats par fragment et par fichier :
 
 ```sql
-SELECT hash FROM fingerprints WHERE hash IN (...);
+SELECT DISTINCT hash FROM fingerprints WHERE hash IN (...);
 ```
 
 Le ratio est le nombre de fingerprints du bloc déjà connus divisé par le nombre total de ses fingerprints. À partir de `internal_detection.overlap_threshold` — 0,85 par défaut — le bloc entier est classé comme déplacement ou duplication interne. Les toutes premières provenances correspondantes sont exportées dans `duplications.json` pour contrôle.
@@ -197,7 +199,7 @@ python scripts/analyze_vault.py full
 
 Raccourci à la racine : `./analyse.sh full`. `./analyse.sh` lance uniquement le mode incrémental.
 
-Elle effectue une seule passe chronologique. Les métadonnées Git sont lues par lots et chaque commit ne charge que les blobs des fichiers modifiés. Les requêtes SQLite portent uniquement sur les fingerprints des blocs courants. Dans un terminal, une barre persistante affiche en continu le pourcentage, le nombre de commits, la vitesse, le temps écoulé et l’ETA. Dans des logs redirigés, un jalon est écrit tous les 250 commits.
+Elle effectue une seule passe chronologique. Les métadonnées Git sont lues par lots et chaque commit ne charge que les blobs des fichiers modifiés. Le coût du fingerprinting est proportionnel aux fragments réellement ajoutés ou supprimés, jamais à la taille totale répétée du fichier. La recherche SQLite est regroupée au niveau du commit. Dans un terminal, une barre persistante affiche en continu le pourcentage, le nombre de commits, la vitesse, le temps écoulé et l’ETA. Dans des logs redirigés, un jalon est écrit tous les 250 commits.
 
 Un checkpoint est enregistré dans `.cache/full-analysis.checkpoint` tous les 100 commits, simultanément à une transaction SQLite. Après une interruption, `./analyse.sh full` reprend uniquement si le checkpoint et le dernier commit enregistré dans l’index coïncident. Le checkpoint est supprimé après une génération complète réussie.
 

@@ -3,18 +3,18 @@
     "id": "727",
     "title": "727",
     "temps_minutes_total": null,
-    "signes_reels_total": 182661,
-    "signes_supprimes_total": 7875,
+    "signes_reels_total": 180859,
+    "signes_supprimes_total": 3463,
     "taille_actuelle": 179639,
     "date_creation": "2026-08-02T15:54:41+02:00",
-    "derniere_activite": "2026-09-04T17:46:40+02:00"
+    "derniere_activite": "2026-09-04T05:21:56+02:00"
   },
   {
     "id": "BornToBike",
     "title": "BornToBike",
     "temps_minutes_total": null,
-    "signes_reels_total": 133758,
-    "signes_supprimes_total": 10398,
+    "signes_reels_total": 10236,
+    "signes_supprimes_total": 10058,
     "taille_actuelle": 3150579,
     "date_creation": "2024-01-02T17:14:48+01:00",
     "derniere_activite": "2026-09-03T06:04:19+02:00"
@@ -23,8 +23,8 @@
     "id": "Carnets",
     "title": "Carnets",
     "temps_minutes_total": null,
-    "signes_reels_total": 47986,
-    "signes_supprimes_total": 15567,
+    "signes_reels_total": 24871,
+    "signes_supprimes_total": 19681,
     "taille_actuelle": 3912593,
     "date_creation": "2024-01-04T18:56:16+01:00",
     "derniere_activite": "2026-03-09T10:13:57+01:00"
@@ -33,21 +33,21 @@
     "id": "Divers",
     "title": "Divers",
     "temps_minutes_total": null,
-    "signes_reels_total": 30149,
-    "signes_supprimes_total": 5783,
+    "signes_reels_total": 63892,
+    "signes_supprimes_total": 6490,
     "taille_actuelle": 178236,
     "date_creation": "2024-01-07T12:30:55+01:00",
-    "derniere_activite": "2026-01-09T18:57:31+01:00"
+    "derniere_activite": "2025-11-02T11:36:02+01:00"
   },
   {
     "id": "IA",
     "title": "IA",
     "temps_minutes_total": null,
-    "signes_reels_total": 234911,
-    "signes_supprimes_total": 36313,
+    "signes_reels_total": 394794,
+    "signes_supprimes_total": 36626,
     "taille_actuelle": 749276,
-    "date_creation": "2024-01-10T20:37:00+01:00",
-    "derniere_activite": "2026-08-25T17:22:25+02:00"
+    "date_creation": "2024-01-02T07:02:22+01:00",
+    "derniere_activite": "2025-11-14T20:43:39+01:00"
   },
   {
     "title": "L'expérience humaine",
@@ -59,8 +59,8 @@
     ],
     "id": "Isa",
     "temps_minutes_total": null,
-    "signes_reels_total": 771251,
-    "signes_supprimes_total": 348805,
+    "signes_reels_total": 112680,
+    "signes_supprimes_total": 481540,
     "taille_actuelle": 337079,
     "date_creation": "2025-08-02T10:38:31+02:00",
     "derniere_activite": "2026-09-10T15:09:38+02:00"
@@ -79,7 +79,7 @@
     "id": "Le roman de mon père",
     "title": "Le roman de mon père",
     "temps_minutes_total": null,
-    "signes_reels_total": 608,
+    "signes_reels_total": 87,
     "signes_supprimes_total": 0,
     "taille_actuelle": 3368100,
     "date_creation": "2024-02-19T09:04:40+01:00",
@@ -100,18 +100,18 @@
     "folder": "Archives/Rush/manuscrit",
     "id": "Rush",
     "temps_minutes_total": null,
-    "signes_reels_total": 251622,
-    "signes_supprimes_total": 749177,
+    "signes_reels_total": 12807,
+    "signes_supprimes_total": 755614,
     "taille_actuelle": 391832,
-    "date_creation": "2024-12-07T11:23:06+01:00",
+    "date_creation": "2024-12-07T10:03:41+01:00",
     "derniere_activite": "2025-12-13T11:05:56+01:00"
   },
   {
     "id": "WIP",
     "title": "WIP",
     "temps_minutes_total": null,
-    "signes_reels_total": 555366,
-    "signes_supprimes_total": 3342459,
+    "signes_reels_total": 163291,
+    "signes_supprimes_total": 2846348,
     "taille_actuelle": 2258206,
     "date_creation": "2024-01-13T18:39:59+01:00",
     "derniere_activite": "2026-03-06T21:30:04+01:00"
@@ -120,8 +120,8 @@
     "id": "iT",
     "title": "iT",
     "temps_minutes_total": null,
-    "signes_reels_total": 581660,
-    "signes_supprimes_total": 252854,
+    "signes_reels_total": 122731,
+    "signes_supprimes_total": 322692,
     "taille_actuelle": 683944,
     "date_creation": "2025-12-07T09:49:51+01:00",
     "derniere_activite": "2026-04-08T16:58:10+02:00"
@@ -130,10 +130,10 @@
     "id": "tcrouzet",
     "title": "tcrouzet",
     "temps_minutes_total": null,
-    "signes_reels_total": 2465381,
-    "signes_supprimes_total": 2476551,
+    "signes_reels_total": 15403840,
+    "signes_supprimes_total": 2615028,
     "taille_actuelle": 15861561,
-    "date_creation": "2024-04-18T19:09:38+02:00",
+    "date_creation": "2024-04-18T18:48:49+02:00",
     "derniere_activite": "2026-09-08T12:42:20+02:00"
   }
 ]
