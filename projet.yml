@@ -1,0 +1,15 @@
+# Les cles sont les identifiants stables des projets.
+# folder est un chemin complet relatif à la racine du vault.
+# Tous les champs sont recopies tels quels dans site/data/projects.json.
+#
+Isa:
+  title: "L'expérience humaine"
+  folder: "Isa/manuscrit"
+  history_folders:
+    - "Zone/manuscrit"
+    - "Isa/Maison"
+    - "Isa/archives/manuscritV1"
+
+Rush:
+  title: Rush
+  folder: "Archives/Rush/manuscrit"

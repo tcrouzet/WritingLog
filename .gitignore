@@ -1,0 +1,7 @@
+.venv/
+.venv-web/
+__pycache__/
+*.py[cod]
+.DS_Store
+.cache/
+site/data/state.json

@@ -1,0 +1,23 @@
+vault_path: "/Users/thierrycrouzet/Documents/ObsidianLocal/text/"
+history_repo: ".cache/vault-history.git"
+
+excluded_folders:
+  - "templates"
+  - ".obsidian"
+  - "archives"
+
+file_extensions: [".md"]
+
+import_detection:
+  # Volume suspect lorsqu'il apparaît dans une fenêtre Git courte.
+  threshold_chars: 1500
+  threshold_window_minutes: 15
+
+internal_detection:
+  minimum_move_chars: 200
+
+session:
+  timeout_minutes: 45
+
+output_dir: "site"
+archived_projects_file: "projets_archives.yml"

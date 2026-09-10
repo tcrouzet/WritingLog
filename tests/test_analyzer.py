@@ -1,0 +1,440 @@
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+ANALYZER = ROOT / "scripts" / "analyze_vault.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from analyze_vault import character_changes
+
+
+class AnalyzerIntegrationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.vault = self.root / "vault"
+        self.vault.mkdir()
+        self.git("init", "-q")
+        self.git("config", "user.name", "Test")
+        self.git("config", "user.email", "test@example.invalid")
+        (self.root / "config.yaml").write_text(
+            """vault_path: vault
+excluded_folders: [journal]
+file_extensions: [.md]
+import_detection:
+  threshold_chars: 1000
+  threshold_window_minutes: 15
+internal_detection:
+  minimum_move_chars: 20
+session:
+  timeout_minutes: 45
+output_dir: site
+""",
+            encoding="utf-8",
+        )
+        (self.root / "projet.yml").write_text(
+            "Alpha:\n  title: Premier projet\n  genre: roman\n  folder: manuscrit\n  history_folders: [Alpha/ancienne-version]\n  date_debut: 2025-01-10\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def git(self, *args: str, env: dict[str, str] | None = None) -> None:
+        subprocess.run(["git", "-C", str(self.vault), *args], check=True, capture_output=True, env=env)
+
+    def commit(self, message: str, timestamp: str) -> None:
+        self.git("add", "-A")
+        env = os.environ.copy()
+        env.update({"GIT_AUTHOR_DATE": timestamp, "GIT_COMMITTER_DATE": timestamp})
+        self.git("commit", "-q", "-m", message, env=env)
+
+    def analyze(self, *args: str, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            [sys.executable, str(ANALYZER), "--config", str(self.root / "config.yaml"), *args],
+            text=True,
+            capture_output=True,
+        )
+        if expect_success and result.returncode:
+            self.fail(result.stderr or result.stdout)
+        return result
+
+    def load(self, name: str):
+        return json.loads((self.root / "site" / "data" / name).read_text(encoding="utf-8"))
+
+    def test_full_history_import_sessions_move_delete_and_incremental(self) -> None:
+        alpha = self.vault / "Alpha"
+        alpha.mkdir()
+        manuscript = alpha / "Manuscrit"
+        manuscript.mkdir()
+        note = manuscript / "note.md"
+        note.write_text("a" * 100, encoding="utf-8")
+        (alpha / "bible.md").write_text("x" * 5000, encoding="utf-8")
+        journal = self.vault / "Journal"
+        journal.mkdir()
+        (journal / "ignored.md").write_text("x" * 5000, encoding="utf-8")
+        self.commit("create", "2026-01-01T10:00:00+01:00")
+        note.write_text("a" * 600, encoding="utf-8")
+        self.commit("write", "2026-01-01T10:15:00+01:00")
+        note.write_text("a" * 2100, encoding="utf-8")
+        self.commit("import", "2026-01-01T10:30:00+01:00")
+
+        beta = self.vault / "Beta"
+        beta.mkdir()
+        note.rename(beta / "note.md")
+        (manuscript / "current.md").write_text("c" * 10, encoding="utf-8")
+        self.commit("move", "2026-01-01T10:40:00+01:00")
+        (beta / "note.md").unlink()
+        self.commit("delete", "2026-01-01T10:50:00+01:00")
+
+        self.analyze("full")
+        projects = {item["id"]: item for item in self.load("projects.json")}
+        self.assertEqual(projects["Alpha"]["signes_reels_total"], 610)
+        self.assertNotIn("signes_importes_total", projects["Alpha"])
+        self.assertNotIn("deplacements_internes_total", projects["Alpha"])
+        self.assertEqual(projects["Alpha"]["taille_actuelle"], 10)
+        self.assertEqual(projects["Alpha"]["genre"], "roman")
+        self.assertEqual(projects["Alpha"]["date_debut"], "2025-01-10")
+        self.assertIsNone(projects["Alpha"]["temps_minutes_total"])
+        self.assertNotIn("Beta", projects)
+        self.assertNotIn("Journal", projects)
+        alpha_curve = [row for row in self.load("size_evolution.json") if row["projet"] == "Alpha"]
+        self.assertEqual(alpha_curve[-1]["taille_signes"], 610)
+        state = self.load("state.json")
+        self.assertEqual(
+            sum(event["import_chars"] for event in state["events"] if event["project"] == "Alpha"),
+            1500,
+        )
+        self.assertEqual(len(state["files"]), 1)
+
+        fresh = beta / "fresh.md"
+        duplicated_text = "un deux trois quatre cinq six sept huit neuf dix"
+        fresh.write_text(duplicated_text, encoding="utf-8")
+        self.commit("new writing", "2026-01-02T10:00:00+01:00")
+        result = self.analyze()
+        self.assertIn("1 nouveau", result.stdout)
+        projects = {item["id"]: item for item in self.load("projects.json")}
+        self.assertEqual(projects["Beta"]["signes_reels_total"], len(duplicated_text))
+        self.assertEqual(projects["Beta"]["taille_actuelle"], len(duplicated_text))
+        self.assertIsNone(projects["Beta"]["temps_minutes_total"])
+
+        reused = manuscript / "reused.md"
+        reused.write_text(duplicated_text, encoding="utf-8")
+        self.commit("reuse existing paragraph", "2026-01-02T10:05:00+01:00")
+        self.analyze("incremental")
+        projects = {item["id"]: item for item in self.load("projects.json")}
+        self.assertEqual(projects["Alpha"]["signes_reels_total"], 610)
+
+        state = self.load("state.json")
+        self.assertEqual(
+            sum(event["internal_chars"] for event in state["events"] if event["project"] == "Alpha"),
+            len(duplicated_text),
+        )
+        self.assertNotIn("note.md", json.dumps(state))
+        result = self.analyze()
+        self.assertIn("0 nouveau", result.stdout)
+
+        archived_beta = self.vault / "Archives" / "Beta"
+        archived_beta.mkdir(parents=True)
+        fresh.rename(archived_beta / "fresh.md")
+        self.commit("archive Beta", "2026-01-02T10:15:00+01:00")
+        self.analyze()
+        candidates = (self.root / "projets_archives.yml").read_text(encoding="utf-8")
+        self.assertIn("Beta:", candidates)
+        self.assertIn("Archives/Beta", candidates)
+        self.assertNotIn("Beta", {item["id"] for item in self.load("projects.json")})
+
+        with (self.root / "projet.yml").open("a", encoding="utf-8") as handle:
+            handle.write("Beta:\n  title: Projet archivé\n  folder: Archives/Beta\n")
+        self.analyze("full")
+        projects = {item["id"]: item for item in self.load("projects.json")}
+        self.assertEqual(projects["Beta"]["title"], "Projet archivé")
+        self.assertEqual(projects["Beta"]["taille_actuelle"], len(duplicated_text))
+
+    def test_writing_in_an_old_project_location_is_credited(self) -> None:
+        old_folder = self.vault / "Alpha" / "ancienne-version"
+        old_folder.mkdir(parents=True)
+        passage = " ".join(f"mot{index}" for index in range(80))
+        old_file = old_folder / "chapitre.md"
+        old_file.write_text(passage, encoding="utf-8")
+        self.commit("write in old location", "2026-01-01T10:00:00+01:00")
+
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir()
+        old_file.rename(manuscript / "chapitre.md")
+        self.commit("move into current location", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        projects = {item["id"]: item for item in self.load("projects.json")}
+        self.assertEqual(projects["Alpha"]["signes_reels_total"], len(passage))
+        self.assertEqual(projects["Alpha"]["taille_actuelle"], len(passage))
+
+    def test_word_edit_counts_only_the_changed_characters(self) -> None:
+        source = "un deux trois quatre cinq six sept huit neuf dix onze douze treize quatorze"
+        edited = source.replace("huit", "HUIT-CORRIGE")
+        added, removed = character_changes(source, edited)
+        # La casse seule conserve l'identité du mot ; seul le suffixe est neuf.
+        self.assertEqual("".join(added), "-CORRIGE")
+        self.assertEqual("".join(removed), "")
+
+    def test_distant_edits_in_a_large_manuscript_stay_local(self) -> None:
+        lines = [(f"Paragraphe {index} " + "texte " * 80 + "\n") for index in range(100)]
+        old = "".join(lines)
+        changed = lines.copy()
+        changed[10] = changed[10].replace("texte", "AJOUT", 1)
+        changed[90] = changed[90].replace("texte", "CORRECTION", 1)
+        added, removed = character_changes(old, "".join(changed))
+        self.assertEqual(sum(map(len, added)), len("AJOUT") + len("CORRECTION"))
+        self.assertEqual(sum(map(len, removed)), 2 * len("texte"))
+
+    def test_sparse_commits_without_observed_project_rate_have_unknown_time(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        long_file = manuscript / "long.md"
+        long_file.write_text("a", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        long_file.write_text("a" * 6001, encoding="utf-8")
+        self.commit("large but progressive writing", "2026-01-05T10:00:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], 6001)
+        self.assertIsNone(project["temps_minutes_total"])
+
+    def test_sparse_commit_uses_only_previously_observed_project_rate(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        note = manuscript / "chapter.md"
+        note.write_text("a", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        note.write_text("a" * 401, encoding="utf-8")
+        self.commit("observed writing", "2026-01-01T10:10:00+01:00")
+        note.write_text("a" * 1601, encoding="utf-8")
+        self.commit("later accumulated writing", "2026-01-03T10:10:00+01:00")
+
+        self.analyze("full")
+        rows = {
+            row["periode"]: row
+            for row in self.load("daily.json")
+            if row["projet"] == "Alpha"
+        }
+        # 400 signes en 10 minutes donnent la seule vitesse observée :
+        # les 1 200 signes suivants correspondent donc à 30 minutes estimées.
+        self.assertEqual(rows["2026-01-03"]["temps_minutes"], 15)
+        self.assertTrue(rows["2026-01-03"]["temps_estime"])
+        self.assertEqual(rows["2026-01-03"]["dossiers"], ["Alpha/manuscrit"])
+
+    def test_historical_rate_cannot_create_more_hours_than_commit_interval(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        note = manuscript / "chapter.md"
+        note.write_text("a", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        note.write_text("a" * 11, encoding="utf-8")
+        self.commit("slow observed edit", "2026-01-01T10:10:00+01:00")
+        note.write_text("a" * 2011, encoding="utf-8")
+        self.commit("large accumulated edit", "2026-01-02T12:10:00+01:00")
+
+        self.analyze("full")
+        row = next(
+            item for item in self.load("daily.json")
+            if item["projet"] == "Alpha" and item["periode"] == "2026-01-02"
+        )
+        self.assertIsNone(row["temps_minutes"])
+        self.assertFalse(row["temps_estime"])
+
+    def test_filled_new_file_uses_project_time_gap_instead_of_forced_import(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "start.md").write_text("début", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+
+        written = "texte original " * 250
+        (manuscript / "new-chapter.md").write_text(written, encoding="utf-8")
+        self.commit("several days of writing", "2026-01-05T10:00:00+01:00")
+
+        self.analyze("full")
+        state = self.load("state.json")
+        event = next(item for item in state["events"] if item["commit"] != state["events"][0]["commit"])
+        self.assertEqual(event["interval_start"], "2026-01-01T10:00:00+01:00")
+        self.assertEqual(event["real_chars"], len(written))
+        self.assertEqual(event["import_chars"], 0)
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len("début") + len(written))
+
+    def test_filled_new_file_is_still_imported_when_rate_is_implausible(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "start.md").write_text("début", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+
+        imported = "contenu importé " * 250
+        (manuscript / "import.md").write_text(imported, encoding="utf-8")
+        self.commit("large new file", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        state = self.load("state.json")
+        event = next(item for item in state["events"] if item["commit"] != state["events"][0]["commit"])
+        self.assertEqual(event["real_chars"], 0)
+        self.assertEqual(event["import_chars"], len(imported))
+
+    def test_import_threshold_uses_previous_vault_commit_not_project_activity(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "start.md").write_text("début", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+
+        unrelated = self.vault / "Beta"
+        unrelated.mkdir()
+        (unrelated / "note.md").write_text("petite note", encoding="utf-8")
+        self.commit("unrelated recent commit", "2026-01-05T09:55:00+01:00")
+
+        imported = "contenu importé " * 250
+        (manuscript / "import.md").write_text(imported, encoding="utf-8")
+        self.commit("large new file", "2026-01-05T10:00:00+01:00")
+        self.analyze("full")
+
+        state = self.load("state.json")
+        event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
+        self.assertEqual(event["real_chars"], 0)
+        self.assertEqual(event["import_chars"], len(imported))
+
+    def test_old_analysis_state_requires_full_rebuild(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "start.md").write_text("début", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        written = "texte original " * 250
+        (manuscript / "new-chapter.md").write_text(written, encoding="utf-8")
+        self.commit("several days of writing", "2026-01-05T10:00:00+01:00")
+        self.analyze("full")
+
+        rows = {
+            row["periode"]: row["signes_reels"]
+            for row in self.load("daily.json")
+            if row["projet"] == "Alpha"
+        }
+        quotient, remainder = divmod(len(written), 4)
+        self.assertEqual(rows["2026-01-02"], quotient)
+        self.assertEqual(rows["2026-01-03"], quotient)
+        self.assertEqual(rows["2026-01-04"], quotient + (1 if remainder >= 2 else 0))
+        self.assertEqual(rows["2026-01-05"], quotient + (1 if remainder >= 1 else 0))
+
+        state_path = self.root / "site" / "data" / "state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["version"] = 13
+        event = state["events"][-1]
+        event["import_chars"] = event["real_chars"]
+        event["real_chars"] = 0
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        result = self.analyze(expect_success=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("relancez ./analyse.sh full", result.stderr)
+
+    def test_created_then_deleted_file_never_counts_as_writing(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "chapter.md").write_text("texte durable", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+
+        temporary = manuscript / "compiled-temporary.md"
+        temporary.write_text("fusion temporaire " * 300, encoding="utf-8")
+        self.commit("temporary compilation", "2026-01-01T10:15:00+01:00")
+        temporary.write_text("fusion temporaire corrigée " * 300, encoding="utf-8")
+        self.commit("refresh compilation", "2026-01-01T10:30:00+01:00")
+        temporary.unlink()
+        self.commit("remove compilation", "2026-01-01T10:45:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len("texte durable"))
+        self.assertEqual(project["signes_supprimes_total"], 0)
+
+    def test_editorial_deletions_are_exported_as_negative_activity(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        note = manuscript / "chapter.md"
+        note.write_text("abcdef", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        note.write_text("abXY", encoding="utf-8")
+        self.commit("cut and rewrite", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_supprimes_total"], 4)
+        row = next(item for item in self.load("daily.json") if item["projet"] == "Alpha")
+        self.assertEqual(row["signes_supprimes"], 4)
+
+    def test_edited_move_keeps_only_new_text_as_production(self) -> None:
+        old_folder = self.vault / "Alpha" / "ancienne-version"
+        old_folder.mkdir(parents=True)
+        source = " ".join(f"ancien{index}" for index in range(80))
+        old_file = old_folder / "chapitre.md"
+        old_file.write_text(source, encoding="utf-8")
+        self.commit("old draft", "2026-01-01T10:00:00+01:00")
+
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir()
+        addition = " Voici le passage réellement écrit pendant la réorganisation."
+        old_file.rename(manuscript / "chapitre-renomme.md")
+        (manuscript / "chapitre-renomme.md").write_text(source + addition, encoding="utf-8")
+        self.commit("move and continue writing", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len(source) + len(addition))
+        self.assertEqual(project["taille_actuelle"], len(source + addition))
+        state = self.load("state.json")
+        self.assertGreaterEqual(
+            sum(event["internal_chars"] for event in state["events"] if event["project"] == "Alpha"),
+            len(source) - 2,
+        )
+
+    def test_compiled_file_from_existing_chapters_is_internal_duplication(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        chapter = "\n\n".join(
+            " ".join(f"mot{paragraph}-{word}" for word in range(80))
+            for paragraph in range(4)
+        )
+        source = manuscript / "chapter.md"
+        source.write_text(chapter, encoding="utf-8")
+        self.commit("write chapters", "2026-01-01T10:00:00+01:00")
+
+        (manuscript / "compiled.md").write_text(chapter, encoding="utf-8")
+        self.commit("compile manuscript", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        state = self.load("state.json")
+        event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
+        self.assertEqual(event["real_chars"], 0)
+        self.assertGreaterEqual(event["internal_chars"], len(chapter) - 8)
+
+    def test_full_resumes_from_checkpoint_when_history_is_identical(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "chapitre.md").write_text(
+            "un deux trois quatre cinq six sept huit neuf dix",
+            encoding="utf-8",
+        )
+        self.commit("initial", "2026-01-01T10:00:00+01:00")
+
+        self.analyze("full", "--dry-run")
+        checkpoint = self.root / ".cache" / "full-analysis.checkpoint"
+        self.assertTrue(checkpoint.exists())
+
+        resumed = self.analyze("full")
+        self.assertIn("Reprise de l'analyse au commit 1/1", resumed.stderr)
+        self.assertFalse(checkpoint.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
