@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import hashlib
 import json
+import math
 from pathlib import Path, PurePosixPath
 import pickle
 import re
@@ -22,10 +23,20 @@ except ImportError:
     print("PyYAML manque. Lancez : python -m pip install -r scripts/requirements.txt", file=sys.stderr)
     raise SystemExit(2)
 
-from git_utils import BlobReader, GitError, changed_paths_batch, ensure_repository, list_commits, list_paths
+from fingerprint_index import FingerprintIndex, winnowed_hashes
+from git_utils import (
+    BlobReader,
+    GitError,
+    changed_paths_batch,
+    commit_exists,
+    commit_timestamp,
+    ensure_repository,
+    list_commits,
+    list_commits_after,
+)
 
 
-STATE_VERSION = 18
+STATE_VERSION = 19
 
 
 def compact_duration(seconds: float) -> str:
@@ -265,89 +276,6 @@ def character_changes(old: str, new: str) -> tuple[list[str], list[str]]:
     return added, removed
 
 
-def common_character_count(left: str, right: str) -> int:
-    if not left or not right:
-        return 0
-    if left in right:
-        return len(left)
-    if right in left:
-        return len(right)
-    left_raw, left_keys = diff_tokens(left)
-    _, right_keys = diff_tokens(right)
-    matcher = SequenceMatcher(None, left_keys, right_keys, autojunk=True)
-    return sum(
-        sum(len(token) for token in left_raw[block.a : block.a + block.size])
-        for block in matcher.get_matching_blocks()
-        if block.size
-    )
-
-
-def movement_blocks(text: str, minimum: int) -> list[str]:
-    """Découpe transitoirement un fragment en paragraphes assez significatifs."""
-    blocks = [block.strip() for block in re.split(r"(?:\r?\n\s*){2,}", text)]
-    return [block for block in blocks if len(block) >= minimum]
-
-
-def block_anchors(text: str) -> set[tuple[str, ...]]:
-    """Ancres de mots directes, limitées au commit courant et jamais persistées."""
-    words = re.findall(r"\w+(?:['’]\w+)*", text.casefold(), re.UNICODE)
-    width = 4
-    if len(words) < width:
-        return set()
-    return {tuple(words[index : index + width]) for index in range(len(words) - width + 1)}
-
-
-def reconcile_internal_moves(
-    added: list[tuple[str, str]],
-    removed: list[tuple[str | None, str]],
-    minimum: int,
-) -> tuple[dict[str, int], dict[str, int]]:
-    """Rapproche les blocs d'un commit en temps quasi linéaire."""
-    removed_units: list[tuple[str | None, str, set[tuple[str, ...]]]] = []
-    exact: dict[str, list[int]] = defaultdict(list)
-    anchor_index: dict[tuple[str, ...], list[int]] = defaultdict(list)
-    for project, fragment in removed:
-        for block in movement_blocks(fragment, minimum):
-            anchors = block_anchors(block)
-            unit_index = len(removed_units)
-            removed_units.append((project, block, anchors))
-            exact[block.casefold()].append(unit_index)
-            for anchor in anchors:
-                anchor_index[anchor].append(unit_index)
-
-    moved_by_project: dict[str, int] = defaultdict(int)
-    removed_credit: dict[str, int] = defaultdict(int)
-    credited_units: dict[int, int] = defaultdict(int)
-    for project, fragment in added:
-        for block in movement_blocks(fragment, minimum):
-            anchors = block_anchors(block)
-            candidates = exact.get(block.casefold(), [])
-            best_index = candidates[0] if candidates else None
-            common = len(block) if best_index is not None else 0
-            if best_index is None and anchors:
-                votes: dict[int, int] = defaultdict(int)
-                for anchor in anchors:
-                    for unit_index in anchor_index.get(anchor, []):
-                        votes[unit_index] += 1
-                if votes:
-                    candidate, shared = max(votes.items(), key=lambda item: item[1])
-                    candidate_anchors = removed_units[candidate][2]
-                    overlap = shared / max(1, min(len(anchors), len(candidate_anchors)))
-                    if shared >= 2 and overlap >= 0.25:
-                        best_index = candidate
-                        common = common_character_count(block, removed_units[candidate][1])
-            if best_index is None or common < minimum:
-                continue
-            moved_by_project[project] += common
-            source_project, source_block, _ = removed_units[best_index]
-            if source_project:
-                available = max(0, len(source_block) - credited_units[best_index])
-                credit = min(common, available)
-                removed_credit[source_project] += credit
-                credited_units[best_index] += credit
-    return moved_by_project, removed_credit
-
-
 def project_for(
     path: str | None,
     extensions: set[str],
@@ -440,25 +368,33 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
         "history_repo": raw.get("history_repo"),
         "output_dir": raw.get("output_dir", "site"),
         "archived_projects_file": raw.get("archived_projects_file", "projets_archives.yml"),
+        "fingerprint_db": raw.get("fingerprint_db", ".cache/fingerprints.sqlite3"),
         "excluded_folders": list(raw.get("excluded_folders", [])),
         "file_extensions": list(raw.get("file_extensions", [".md"])),
-        "import_detection": {
-            "threshold_chars": raw.get("import_detection", {}).get("threshold_chars", 1000),
-            "threshold_window_minutes": raw.get("import_detection", {}).get("threshold_window_minutes", 15),
-        },
         "internal_detection": {
-            "minimum_move_chars": raw.get("internal_detection", {}).get("minimum_move_chars", 200),
+            "gram_chars": raw.get("internal_detection", {}).get("gram_chars", 36),
+            "selection_chars": raw.get("internal_detection", {}).get("selection_chars", 180),
+            "overlap_threshold": raw.get("internal_detection", {}).get("overlap_threshold", 0.85),
+        },
+        "import_detection": {
+            "rate_percentile": raw.get("import_detection", {}).get("rate_percentile", 99),
         },
         "session": {
             "timeout_minutes": raw.get("session", {}).get("timeout_minutes", 45),
         },
     }
-    if result["import_detection"]["threshold_chars"] < 0:
-        raise ValueError("import_detection.threshold_chars doit être positif.")
-    if result["import_detection"]["threshold_window_minutes"] <= 0:
-        raise ValueError("import_detection.threshold_window_minutes doit être supérieur à zéro.")
-    if result["internal_detection"]["minimum_move_chars"] < 1:
-        raise ValueError("internal_detection.minimum_move_chars doit être supérieur à zéro.")
+    gram = int(result["internal_detection"]["gram_chars"])
+    selection = int(result["internal_detection"]["selection_chars"])
+    overlap = float(result["internal_detection"]["overlap_threshold"])
+    percentile = float(result["import_detection"]["rate_percentile"])
+    if not 30 <= gram <= 40:
+        raise ValueError("internal_detection.gram_chars doit être compris entre 30 et 40.")
+    if selection < gram:
+        raise ValueError("internal_detection.selection_chars doit être supérieur à gram_chars.")
+    if not 0 < overlap <= 1:
+        raise ValueError("internal_detection.overlap_threshold doit être compris entre 0 et 1.")
+    if not 0 < percentile <= 100:
+        raise ValueError("import_detection.rate_percentile doit être compris entre 0 et 100.")
     if result["session"]["timeout_minutes"] <= 0:
         raise ValueError("session.timeout_minutes doit être supérieur à zéro.")
     return result
@@ -474,7 +410,7 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "events": [],
         "size_points": [],
         "archive_moves": {},
-        "seen_blobs": [],
+        "project_rates": {},
     }
 
 
@@ -504,46 +440,21 @@ def minutes_between(newer: str, older: str | None, default: float) -> float:
     return max(0.0, delta)
 
 
-def transient_file_ranges(repo: Path, commits: list[Any]) -> dict[str, list[tuple[int, int]]]:
-    """Repère les fichiers créés puis supprimés, hors renommages exacts."""
-    births: dict[str, int] = {}
-    ranges: dict[str, list[tuple[int, int]]] = defaultdict(list)
-    for batch_start in range(0, len(commits), 200):
-        batch = commits[batch_start : batch_start + 200]
-        changes_by_commit = changed_paths_batch(
-            repo,
-            [commit.sha for commit in batch],
-            detect_renames=True,
-        )
-        for offset, commit in enumerate(batch):
-            index = batch_start + offset
-            changes = changes_by_commit.get(commit.sha, [])
-            for change in changes:
-                if change.status == "R" and change.old_path and change.new_path:
-                    if change.old_path in births:
-                        births[change.new_path] = births.pop(change.old_path)
-            additions_by_oid: dict[str, list[str]] = defaultdict(list)
-            for change in changes:
-                if change.status == "A" and change.new_path and change.new_oid:
-                    additions_by_oid[change.new_oid].append(change.new_path)
-            renamed_targets: set[str] = set()
-            for change in changes:
-                if change.status != "D" or not change.old_path:
-                    continue
-                targets = additions_by_oid.get(change.old_oid or "", [])
-                target = next((path for path in targets if path not in renamed_targets), None)
-                if target:
-                    renamed_targets.add(target)
-                    if change.old_path in births:
-                        births[target] = births.pop(change.old_path)
-                    continue
-                born = births.pop(change.old_path, None)
-                if born is not None:
-                    ranges[change.old_path].append((born, index))
-            for change in changes:
-                if change.status == "A" and change.new_path and change.new_path not in renamed_targets:
-                    births[change.new_path] = index
-    return dict(ranges)
+def percentile_threshold(values: list[float], percentile: float) -> float | None:
+    """Percentile empirique par rang supérieur, sans seuil de rythme fixe."""
+    if not values:
+        return None
+    ordered = sorted(float(value) for value in values)
+    rank = max(0, math.ceil(percentile / 100 * len(ordered)) - 1)
+    return ordered[rank]
+
+
+def fallback_project(path: str | None, tracked_project: str | None) -> str:
+    """Provenance de l'index, y compris pour un dossier non suivi."""
+    if tracked_project:
+        return tracked_project
+    parts = PurePosixPath(path).parts if path else ()
+    return parts[0] if parts else ""
 
 
 def process_history_diff(
@@ -551,58 +462,39 @@ def process_history_diff(
     state: dict[str, Any],
     config: dict[str, Any],
     metadata: dict[str, Any],
+    fingerprint_db: Path,
     checkpoint_path: Path | None = None,
     analysis_fingerprint: str = "",
+    persist_index: bool = True,
 ) -> tuple[int, int]:
-    """Analyse linéaire par diff, sans indexer le contenu historique."""
-    commits = list_commits(repo)
-    transient_ranges = transient_file_ranges(repo, commits)
-    commit_intervals = {
-        commit.sha: (commits[index - 1].timestamp if index else None)
-        for index, commit in enumerate(commits)
-    }
-    # Les anciens états ne conservaient que la date du commit courant. Cette
-    # borne permet de répartir le travail sur les jours réellement couverts par
-    # un commit espacé, y compris lors d'une migration incrémentale sans diff.
-    for event in state.get("events", []):
-        event.setdefault("interval_start", commit_intervals.get(event["commit"]))
+    """Analyse les seuls fichiers modifiés et maintient l'index SQLite."""
     full_run = state.get("last_commit") is None
-    identity = history_identity(commits, analysis_fingerprint)
-    checkpoint = load_checkpoint(checkpoint_path, identity) if full_run and checkpoint_path else None
     start = 0
     relevant_commits = 0
-    if checkpoint and checkpoint.get("phase") == "diff-analysis":
-        state.clear()
-        state.update(checkpoint["state"])
-        start = int(checkpoint["next_index"])
-        relevant_commits = int(checkpoint["relevant_commits"])
-        seen_blobs = set(checkpoint["seen_blobs"])
-        print(f"Reprise de l'analyse au commit {start}/{len(commits)}.", file=sys.stderr)
+    if full_run:
+        commits = list_commits(repo)
+        identity = history_identity(commits, analysis_fingerprint)
+        checkpoint = load_checkpoint(checkpoint_path, identity) if checkpoint_path else None
+        if checkpoint and checkpoint.get("phase") == "diff-analysis":
+            state.clear()
+            state.update(checkpoint["state"])
+            start = int(checkpoint["next_index"])
+            relevant_commits = int(checkpoint["relevant_commits"])
+            print(f"Reprise de l'analyse au commit {start}/{len(commits)}.", file=sys.stderr)
+        pending = commits[start:]
+        previous_timestamp = commits[start - 1].timestamp if start else None
     else:
-        seen_blobs = set(state.get("seen_blobs", []))
-        previous = state.get("last_commit")
-        if previous:
-            hashes = [commit.sha for commit in commits]
-            if previous not in hashes:
-                raise ValueError("Le dernier commit traité n'est plus dans l'historique ; lancez ./analyse.sh full.")
-            start = hashes.index(previous) + 1
-
-    pending = commits[start:]
-    if not full_run and any(
-        born < start <= deleted
-        for ranges in transient_ranges.values()
-        for born, deleted in ranges
-    ):
-        raise ValueError(
-            "Un fichier transitoire concerne des commits déjà analysés ; "
-            "lancez ./analyse.sh full pour corriger les totaux."
-        )
-
-    def is_transient(path: str | None, commit_index: int) -> bool:
-        return bool(path) and any(
-            born <= commit_index <= deleted
-            for born, deleted in transient_ranges.get(path, [])
-        )
+        checkpoint = None
+        previous = str(state["last_commit"])
+        if not commit_exists(repo, previous):
+            raise ValueError("Le dernier commit traité n'est plus dans l'historique ; lancez ./analyse.sh full.")
+        pending = list_commits_after(repo, previous)
+        commits = pending
+        previous_timestamp = commit_timestamp(repo, previous)
+    commit_intervals: dict[str, str | None] = {}
+    for commit in pending:
+        commit_intervals[commit.sha] = previous_timestamp
+        previous_timestamp = commit.timestamp
     extensions = {
         str(ext).lower() if str(ext).startswith(".") else f".{str(ext).lower()}"
         for ext in config["file_extensions"]
@@ -610,19 +502,37 @@ def process_history_diff(
     excluded = {str(folder).strip("/").casefold() for folder in config["excluded_folders"]}
     current_paths = configured_project_paths(metadata, include_history=False)
     history_paths = configured_project_paths(metadata, include_history=True)
-    base_chars = float(config["import_detection"]["threshold_chars"])
-    base_minutes = float(config["import_detection"]["threshold_window_minutes"])
-    minimum_move = int(config["internal_detection"]["minimum_move_chars"])
+    gram_chars = int(config["internal_detection"]["gram_chars"])
+    selection_chars = int(config["internal_detection"]["selection_chars"])
+    overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
+    rate_percentile = float(config["import_detection"]["rate_percentile"])
+    timeout_minutes = float(config["session"]["timeout_minutes"])
     files = state["files"]
     project_sizes = state["project_sizes"]
     events = state["events"]
     size_points = state["size_points"]
     archive_moves = state["archive_moves"]
+    project_rates = state["project_rates"]
 
     def new_bucket() -> dict[str, Any]:
-        return {"added": [], "removed": [], "internal": 0, "folders": set()}
+        return {
+            "novel": 0,
+            "removed": [],
+            "internal": 0,
+            "internal_hashes": set(),
+            "sources": [],
+            "folders": set(),
+        }
 
-    with BlobReader(repo) as blobs:
+    reset_index = full_run and checkpoint is None
+    with FingerprintIndex(fingerprint_db, reset=reset_index) as fingerprints, BlobReader(repo) as blobs:
+        expected_index_commit = state.get("last_commit")
+        if checkpoint and fingerprints.meta("last_commit") != expected_index_commit:
+            raise ValueError(
+                "Le checkpoint et l'index SQLite divergent ; supprimez le checkpoint puis relancez ./analyse.sh full."
+            )
+        if not full_run and fingerprints.meta("last_commit") != expected_index_commit:
+            raise ValueError("L'index SQLite ne correspond pas à state.json ; relancez ./analyse.sh full.")
         total = len(commits) if full_run else len(pending)
         progress = ProgressBar("Analyse chronologique", total, start if full_run else 0)
         batch_start = -1
@@ -632,20 +542,17 @@ def process_history_diff(
             if wanted_batch_start != batch_start:
                 batch_start = wanted_batch_start
                 batch = pending[batch_start : batch_start + 100]
-                batch_changes = changed_paths_batch(repo, [item.sha for item in batch])
+                batch_changes = changed_paths_batch(
+                    repo,
+                    [item.sha for item in batch],
+                    detect_renames=True,
+                )
             absolute_index = start + relative_index
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
-            outside_removed: list[str] = []
-            additions: list[dict[str, Any]] = []
-            deletions: list[dict[str, Any]] = []
-            prior_text_pool: list[tuple[str | None, str]] = []
             touched_sizes: set[str] = set()
-            commit_new_oids: set[str] = set()
 
             for change in batch_changes.get(commit.sha, []):
-                if change.new_oid:
-                    commit_new_oids.add(change.new_oid)
                 old_path = change.old_path or (change.new_path if change.status != "A" else None)
                 new_path = change.new_path
                 old_md = bool(old_path and PurePosixPath(old_path).suffix.lower() in extensions)
@@ -658,8 +565,6 @@ def process_history_diff(
                 new_current = project_for(new_path, extensions, excluded, current_paths)
                 old_project = project_for(old_path, extensions, excluded, history_paths)
                 new_project = project_for(new_path, extensions, excluded, history_paths)
-                if old_project and old_text:
-                    prior_text_pool.append((old_project, old_text))
                 old_folder = tracked_folder_for(old_path, old_project, history_paths)
                 new_folder = tracked_folder_for(new_path, new_project, history_paths)
                 if old_project and old_folder:
@@ -681,36 +586,50 @@ def process_history_diff(
                     }
                     touched_sizes.add(new_current)
 
-                record = {
-                    "change": change,
-                    "old": old_text,
-                    "new": new_text,
-                    "old_project": old_project,
-                    "new_project": new_project,
-                    "transient": is_transient(new_path or old_path, absolute_index - 1),
-                }
-                if change.status == "A":
-                    additions.append(record)
+                if change.status in {"A", "R", "C"}:
+                    added_parts, removed_parts = ([new_text] if new_text else []), []
                 elif change.status == "D":
-                    deletions.append(record)
+                    added_parts, removed_parts = [], []
                 else:
                     added_parts, removed_parts = character_changes(old_text, new_text)
-                    if new_project:
-                        if record["transient"]:
-                            work[new_project]["internal"] += sum(map(len, added_parts))
+
+                introduced_hashes: list[str] = []
+                if new_project:
+                    for part in added_parts:
+                        block_hashes = winnowed_hashes(part, gram_chars, selection_chars)
+                        introduced_hashes.extend(block_hashes)
+                        known, sources = fingerprints.original_sources(block_hashes)
+                        matched = sum(1 for value in block_hashes if value in known)
+                        ratio = matched / len(block_hashes) if block_hashes else 0.0
+                        if block_hashes and ratio >= overlap_threshold:
+                            work[new_project]["internal"] += len(part)
+                            work[new_project]["internal_hashes"].update(block_hashes)
+                            work[new_project]["sources"].append({
+                                "target_file": new_path,
+                                "characters": len(part),
+                                "matching_hashes": matched,
+                                "total_hashes": len(block_hashes),
+                                "overlap_ratio": round(ratio, 6),
+                                "origins": sources,
+                            })
                         else:
-                            work[new_project]["added"].extend(added_parts)
-                    if old_project and change.status != "C" and not record["transient"]:
-                        work[old_project]["removed"].extend(removed_parts)
-                    elif change.status != "C" and not record["transient"]:
-                        outside_removed.extend(removed_parts)
-                    if change.status in {"R", "C"} and (new_project or old_project):
-                        target = new_project or old_project
-                        unchanged = min(
-                            len(old_text) - sum(map(len, removed_parts)),
-                            len(new_text) - sum(map(len, added_parts)),
-                        )
-                        work[target]["internal"] += max(0, unchanged)
+                            work[new_project]["novel"] += len(part)
+                    if removed_parts:
+                        work[old_project or new_project]["removed"].extend(removed_parts)
+
+                current_hashes = (
+                    winnowed_hashes(new_text, gram_chars, selection_chars)
+                    if new_md and new_path else []
+                )
+                index_project = fallback_project(new_path or old_path, new_project or old_project)
+                fingerprints.update_file(
+                    old_path if old_md else None,
+                    new_path if new_md else None,
+                    index_project,
+                    commit.sha,
+                    current_hashes,
+                    introduced_hashes,
+                )
 
                 if old_project and change.status == "R" and new_path:
                     parts = PurePosixPath(new_path).parts
@@ -720,88 +639,33 @@ def process_history_diff(
                             "moved_at": commit.timestamp,
                         }
 
-            for record in additions:
-                if not record["new_project"]:
-                    continue
-                change = record["change"]
-                if record["transient"]:
-                    work[record["new_project"]]["internal"] += len(record["new"])
-                elif change.new_oid and change.new_oid in seen_blobs:
-                    work[record["new_project"]]["internal"] += len(record["new"])
-                else:
-                    # Un fichier qui apparaît rempli est suspect, mais ce n'est
-                    # pas une preuve d'import. Son texte neuf rejoint les autres
-                    # ajouts : les rapprochements internes sont retirés d'abord,
-                    # puis le seuil temporel du projet tranche entre écriture et
-                    # import. Cela préserve plusieurs jours de travail regroupés
-                    # dans un seul commit.
-                    work[record["new_project"]]["added"].append(record["new"])
-
-            # Une compilation peut apparaître sans modifier ni supprimer ses
-            # chapitres sources. Pour les seuls gros nouveaux fichiers, charger
-            # une fois l'état antérieur complet du projet permet de reconnaître
-            # ce contenu sans imposer ce coût à chaque commit ordinaire.
-            expanded_projects: set[str] = set()
-            if commit_intervals.get(commit.sha):
-                for record in additions:
-                    project = record["new_project"]
-                    if not project or len(record["new"]) <= base_chars or project in expanded_projects:
-                        continue
-                    expanded_projects.add(project)
-                    parent_ref = f"{commit.sha}^"
-                    for previous_path in list_paths(repo, parent_ref):
-                        if project_for(previous_path, extensions, excluded, history_paths) != project:
-                            continue
-                        previous_text = blobs.text(parent_ref, previous_path) or ""
-                        if previous_text:
-                            prior_text_pool.append((project, previous_text))
-            for record in deletions:
-                # La disparition d'un fichier entier sert à détecter un
-                # déplacement, mais ne prouve pas une session d'édition.
-                outside_removed.append(record["old"])
-
-            removed_pool = [(None, part) for part in outside_removed]
-            removed_pool.extend(
-                (project, part)
-                for project, values in work.items()
-                for part in values["removed"]
-            )
-            added_pool = [
-                (project, part)
-                for project, values in work.items()
-                for part in values["added"]
-            ]
-            moved_by_project, removed_credit = reconcile_internal_moves(
-                added_pool, removed_pool, minimum_move
-            )
-            duplicated_by_project, _ = reconcile_internal_moves(
-                added_pool, prior_text_pool, minimum_move
-            )
+            commit_internal_hashes = set().union(
+                *(values["internal_hashes"] for values in work.values())
+            ) if work else set()
             for project, values in work.items():
-                # Un fragment retiré est aussi présent dans l'ancienne version
-                # du fichier : prendre le maximum évite de compter deux fois le
-                # même texte comme déplacement puis comme duplication.
-                internal_credit = max(
-                    moved_by_project[project],
-                    duplicated_by_project[project],
-                )
-                values["internal"] += internal_credit
-                added_chars = max(0, sum(map(len, values["added"])) - internal_credit)
-                removed_chars = max(
-                    0,
-                    sum(map(len, values["removed"])) - removed_credit[project],
-                )
-                gap = minutes_between(
-                    commit.timestamp,
-                    commit_intervals.get(commit.sha),
-                    base_minutes,
-                )
-                threshold = base_chars * (max(1.0, gap) / base_minutes)
-                real_chars = added_chars if added_chars <= threshold else 0
-                import_chars = added_chars if added_chars > threshold else 0
+                removed_chars = 0
+                for part in values["removed"]:
+                    removed_hashes = winnowed_hashes(part, gram_chars, selection_chars)
+                    overlap = (
+                        sum(1 for value in removed_hashes if value in commit_internal_hashes)
+                        / len(removed_hashes)
+                        if removed_hashes else 0.0
+                    )
+                    if overlap < overlap_threshold:
+                        removed_chars += len(part)
+
+                novel_chars = int(values["novel"])
+                interval_start = commit_intervals.get(commit.sha)
+                gap = minutes_between(commit.timestamp, interval_start, 0.0) if interval_start else 0.0
+                rates = [float(value) for value in project_rates.get(project, [])]
+                threshold = percentile_threshold(rates, rate_percentile)
+                current_rate = novel_chars / gap if novel_chars > 0 and gap > 0 else None
+                is_import = current_rate is not None and threshold is not None and current_rate > threshold
+                real_chars = 0 if is_import else novel_chars
+                import_chars = novel_chars if is_import else 0
                 events.append({
                     "timestamp": commit.timestamp,
-                    "interval_start": commit_intervals.get(commit.sha),
+                    "interval_start": interval_start,
                     "commit": commit.sha,
                     "project": project,
                     "real_chars": real_chars,
@@ -809,12 +673,16 @@ def process_history_diff(
                     "internal_chars": values["internal"],
                     "edit_delta": -removed_chars,
                     "folders": sorted(values["folders"]),
+                    "rate_chars_per_minute": current_rate,
+                    "rate_percentile_threshold": threshold,
+                    "duplication_sources": values["sources"],
                 })
-                # Le seuil d'import porte sur l'intervalle depuis le commit
-                # précédent du Vault : c'est la période pendant laquelle ces
-                # modifications ont pu s'accumuler.
-
-            seen_blobs.update(commit_new_oids)
+                if (
+                    real_chars > 0
+                    and current_rate is not None
+                    and 0 < gap <= timeout_minutes
+                ):
+                    project_rates.setdefault(project, []).append(current_rate)
 
             if work:
                 relevant_commits += 1
@@ -830,16 +698,18 @@ def process_history_diff(
             if full_run and checkpoint_path and (
                 absolute_index % 100 == 0 or absolute_index == len(commits)
             ):
+                fingerprints.commit(commit.sha)
                 write_checkpoint(checkpoint_path, {
                     "identity": identity,
                     "phase": "diff-analysis",
                     "next_index": absolute_index,
                     "state": state,
-                    "seen_blobs": seen_blobs,
                     "relevant_commits": relevant_commits,
                 })
-
-    state["seen_blobs"] = sorted(seen_blobs)
+        if state.get("last_commit") and persist_index:
+            fingerprints.commit(state["last_commit"])
+        elif not persist_index:
+            fingerprints.rollback()
     return len(pending), relevant_commits
 
 
@@ -1074,6 +944,17 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
         "derniere_mise_a_jour": datetime.now().astimezone().isoformat(timespec="seconds"),
         "dernier_commit": state.get("last_commit"),
     }
+    duplications = [
+        {
+            "timestamp": event["timestamp"],
+            "commit": event["commit"],
+            "projet": event["project"],
+            "signes": int(event.get("internal_chars", 0)),
+            "blocs": event.get("duplication_sources", []),
+        }
+        for event in events
+        if event.get("duplication_sources")
+    ]
     return {
         "overview": overview,
         "projects": projects,
@@ -1081,6 +962,7 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
         "weekly": rollup("week"),
         "monthly": rollup("month"),
         "size_evolution": sizes,
+        "duplications": duplications,
     }
 
 
@@ -1146,6 +1028,7 @@ def main() -> int:
         )
         output = (base_dir / config["output_dir"]).resolve()
         archived_projects_path = (base_dir / config["archived_projects_file"]).resolve()
+        fingerprint_db = (base_dir / config["fingerprint_db"]).resolve()
         checkpoint_path = base_dir / ".cache" / "full-analysis.checkpoint"
         data_dir = output / "data"
         if not history_repo.exists() and config.get("history_repo"):
@@ -1162,8 +1045,10 @@ def main() -> int:
             state,
             config,
             metadata,
+            fingerprint_db,
             checkpoint_path=checkpoint_path if full_rebuild else None,
             analysis_fingerprint=fingerprint,
+            persist_index=full_rebuild or not args.dry_run,
         )
         exports = aggregate(state, config, metadata)
         if not args.dry_run:

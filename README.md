@@ -2,9 +2,9 @@
 
 Writing Log transforme l’historique Git d’un vault Obsidian en statistiques d’écriture, puis les présente dans un dashboard statique. Il suit les fichiers Markdown situés dans les chemins des projets configurés ainsi que les projets ordinaires placés à la racine du vault.
 
-## Avertissement — méthode actuelle non fiable
+## Avertissement — limites de la mesure
 
-La version actuelle est un **prototype dont les mesures de production, d’import, de déplacement et de temps ne sont pas fiables**. Le dashboard fonctionne techniquement, mais ses chiffres ne doivent pas être interprétés comme une mesure réelle du travail d’écriture. Ce défaut ne relève pas seulement d’un seuil à ajuster : la méthode tente de déduire des événements absents de l’historique Git.
+Writing Log reste un prototype : Git ne contient pas assez d’information pour reconstituer avec certitude la production et le temps de travail. Les classifications sont contrôlables, mais ne doivent pas être confondues avec une observation de la frappe.
 
 ### Ce que Git permet réellement d’observer
 
@@ -12,9 +12,9 @@ Pour chaque commit, Git fournit deux instantanés du texte et leur date d’enre
 
 La taille du projet au dernier commit est directement observable, à condition que `folder` désigne exactement son emplacement. En revanche, les métriques historiques produites par l’analyse sont des inférences.
 
-### Pourquoi la classification actuelle échoue
+### Pourquoi la méthode précédente échouait
 
-L’algorithme applique un seuil d’import proportionnel au temps écoulé :
+Jusqu’à la version 18, l’algorithme appliquait un seuil d’import proportionnel au temps écoulé :
 
 ```text
 seuil = threshold_chars × durée_depuis_le_commit_précédent / threshold_window_minutes
@@ -22,9 +22,9 @@ seuil = threshold_chars × durée_depuis_le_commit_précédent / threshold_windo
 
 Cette formule ne possède pas de fondement permettant d’identifier la provenance du texte. Après un long intervalle, un collage ou une compilation très volumineuse peut passer sous le seuil et être déclaré « écriture réelle ». Après un intervalle court, une production humaine rapide peut au contraire être déclarée « import ». Le même texte reçoit donc une classe différente selon la fréquence des commits.
 
-La détection des déplacements repose sur des blocs séparés par paragraphes, des ancres de quatre mots et une similarité calculée par `SequenceMatcher`. Elle ne constitue pas une filiation du texte : une réécriture peut casser les ancres, des formulations répétitives peuvent créer de faux rapprochements et un même passage copié plusieurs fois peut recevoir un crédit incohérent. La détection de renommage `git diff -M` repose elle aussi sur un seuil de similarité propre à Git.
+La détection des déplacements reposait sur des blocs séparés par paragraphes, des ancres de quatre mots et une similarité calculée par `SequenceMatcher`. Elle ne constituait pas une filiation du texte : une réécriture pouvait casser les ancres, des formulations répétitives créer de faux rapprochements et un même passage copié plusieurs fois recevoir un crédit incohérent.
 
-La règle « fichier créé puis supprimé = fichier transitoire » est une hypothèse propre à ce vault, pas une propriété démontrable. Elle peut écarter un véritable texte abandonné. Inversement, un fichier de compilation conservé durablement n’est pas transitoire et peut rester mal classé.
+La règle « fichier créé puis supprimé = fichier transitoire » pouvait écarter un véritable texte abandonné, tandis qu’un fichier de compilation conservé durablement échappait à la règle. Ces trois mécanismes ont été retirés de la version 19 au profit de l’index winnowé décrit plus bas.
 
 ### Pourquoi les jours et les durées sont artificiels
 
@@ -36,7 +36,7 @@ Les suppressions négatives décrivent uniquement des caractères présents dans
 
 ### Conséquence
 
-Les JSON et graphiques actuels servent à examiner le prototype et ses erreurs. Ils ne permettent pas encore d’affirmer combien de signes ont été écrits un jour donné, combien d’heures ont été travaillées, ni quelle part provient réellement d’un import ou d’un déplacement. Une méthode de remplacement devra soit s’appuyer sur des événements capturés au moment de l’édition, soit assumer explicitement des métriques limitées aux différences observables entre commits, sans les présenter comme un historique réel de production.
+Les JSON et graphiques ne permettent pas d’affirmer avec certitude combien de signes ont été écrits un jour donné ni combien d’heures ont été travaillées. La version 19 limite désormais la reconnaissance des déplacements à une trace textuelle vérifiable et exporte ses sources, mais la distinction écriture/import reste une inférence statistique.
 
 ## Commandes à utiliser
 
@@ -68,7 +68,7 @@ Les environnements sont séparés : `.venv/` est réservé à l’analyse et `.v
 python -m pip install -r scripts/requirements.txt
 ```
 
-Dans `config.yaml`, indiquez `vault_path`. Un chemin relatif est résolu depuis le dossier qui contient la configuration, pas depuis le terminal. Ajustez ensuite les dossiers exclus, le seuil d’import et les durées de session.
+Dans `config.yaml`, indiquez `vault_path`. Un chemin relatif est résolu depuis le dossier qui contient la configuration, pas depuis le terminal. Ajustez ensuite les dossiers exclus, les paramètres du winnowing, le percentile du rythme et la durée maximale d’une session observable.
 
 `history_repo` peut pointer vers un miroir Git local dédié. La configuration fournie utilise `.cache/vault-history.git`. Créez ou actualisez ce miroir vous-même avant l’analyse :
 
@@ -114,27 +114,48 @@ L’identifiant YAML du projet reste stable même si son dossier change. Pour ch
 
 Une correspondance explicite dans `projet.yml` est prioritaire sur `excluded_folders`. Le chemin racine qui a produit chaque valeur — par exemple `Isa/manuscrit` ou `Zone/manuscrit` — est conservé dans les données quotidiennes et affiché dans l’infobulle du graphique.
 
-### 3. Le cycle de vie des fichiers est examiné avant les signes
+### 3. Un index winnowé persistant représente le texte déjà rencontré
 
-Avant de compter les modifications, l’analyse repère les créations, suppressions et renommages sur l’ensemble de la période traitée.
+Le texte ajouté est normalisé en Unicode NFKC, passé en minuscules et ses espaces sont compactés. Il est ensuite découpé en fenêtres glissantes de `internal_detection.gram_chars` caractères — 36 par défaut. Chaque fenêtre reçoit un hash BLAKE2b de 64 bits.
 
-- Un fichier Markdown créé puis supprimé est transitoire. Dans ce vault, il correspond à un artefact de fusion ou d’export : toutes ses créations et modifications sont exclues de la production.
-- Lorsqu’une suppression et une création correspondante sont identifiables dans le même commit, elles sont suivies comme un renommage grâce à la détection native de Git, y compris lorsque le fichier a été modifié pendant son déplacement.
-- Si une suppression révèle en mode incrémental qu’un fichier déjà compté était transitoire, l’analyse demande explicitement un `full` afin de corriger tout son passé.
+Le winnowing conserve seulement le hash minimal de chaque fenêtre de sélection de `internal_detection.selection_chars` caractères — 180 par défaut. L’index SQLite `.cache/fingerprints.sqlite3` stocke ces seuls fingerprints avec leur projet, fichier et commit :
+
+```sql
+CREATE TABLE fingerprints (
+    hash TEXT NOT NULL,
+    project TEXT NOT NULL,
+    file TEXT NOT NULL,
+    commit_hash TEXT NOT NULL,
+    removed_at_commit TEXT
+);
+CREATE INDEX idx_hash ON fingerprints(hash);
+```
+
+Quand un fichier change, seul ce fichier est relu et fingerprinté. L’index complet n’est jamais rechargé ni recalculé à chaque commit. Lorsqu’un fingerprint disparaît du fichier, sa ligne reste dans `fingerprints` et reçoit le commit dans `removed_at_commit`; elle peut donc identifier une réapparition future. Une petite table auxiliaire maintient uniquement la liste active des fingerprints par fichier.
 
 ### 4. Les changements sont classés
 
-Pour chaque commit et chaque projet, Writing Log sépare trois catégories :
+Pour chaque nouveau bloc, l’analyse interroge l’index par lots :
 
-- **Écriture réelle** : caractères nouveaux qui ne sont ni une copie interne ni un import détecté.
-- **Déplacement ou duplication interne** : texte déjà présent dans le vault, déplacé, recopié ou rassemblé dans un fichier de compilation. Cette quantité ne contribue jamais à la production.
-- **Import externe** : volume de texte neuf incompatible avec la fenêtre comprise entre le commit précédent du vault et le commit courant. Cette quantité ne contribue jamais à la production.
+```sql
+SELECT hash FROM fingerprints WHERE hash IN (...);
+```
 
-Les suppressions effectuées à l’intérieur d’un fichier suivi constituent une quatrième mesure : l’**activité éditoriale négative**. Elles sont exportées comme une quantité positive `signes_supprimes`, puis dessinées sous l’axe zéro dans le graphique. Les suppressions dues à un déplacement, à un renommage, à un fichier transitoire ou à la disparition d’un fichier complet sont exclues : elles ne prouvent pas un travail de coupe du texte.
+Le ratio est le nombre de fingerprints du bloc déjà connus divisé par le nombre total de ses fingerprints. À partir de `internal_detection.overlap_threshold` — 0,85 par défaut — le bloc entier est classé comme déplacement ou duplication interne. Les toutes premières provenances correspondantes sont exportées dans `duplications.json` pour contrôle.
+
+Sous ce seuil, le bloc est textuellement nouveau. Son rythme en signes par minute est comparé au percentile empirique `import_detection.rate_percentile` — 99 par défaut — des rythmes d’écriture déjà observés sur ce projet :
+
+- ratio de recouvrement supérieur ou égal au seuil : **déplacement/duplication interne** ;
+- ratio inférieur et rythme inférieur ou égal au percentile historique : **écriture réelle** ;
+- ratio inférieur et rythme supérieur au percentile historique : **import externe**.
+
+Tant que le projet ne possède aucun rythme antérieur observable, aucun seuil fixe ne le remplace : le texte non dupliqué est conservé comme écriture et le seuil n’est appris que sur les intervalles courts réellement disponibles. Déplacements et imports sont exclus des signes produits mais restent inclus dans la taille actuelle, calculée directement depuis le contenu des fichiers. Dans les trois cas, les fingerprints du bloc sont ajoutés avec leur nouvelle provenance.
+
+Les suppressions effectuées à l’intérieur d’un fichier suivi constituent une quatrième mesure : l’**activité éditoriale négative**. Elles sont exportées comme une quantité positive `signes_supprimes`, puis dessinées sous l’axe zéro. Une suppression recouverte par les fingerprints d’un déplacement reconnu dans le même commit et la disparition d’un fichier complet sont exclues de cette mesure.
 
 La comparaison commence par retirer les grands préfixes et suffixes identiques, puis travaille sur les zones modifiées au niveau des mots et des caractères. Changer un mot dans un paragraphe ne transforme donc pas tout le paragraphe en texte nouveau.
 
-Les déplacements effectués dans un même commit sont rapprochés avec les fragments supprimés. Un gros fichier nouvellement créé est en plus comparé à tous les fichiers du projet au commit précédent. Une fusion comme `zone.md`, composée de chapitres encore présents, est ainsi reconnue comme duplication interne.
+Une fusion comme `zone.md` est reconnue par ses fingerprints déjà présents, sans recharger les chapitres sources ni comparer le nouveau fichier à tous les fichiers historiques.
 
 ### 5. Git donne une fenêtre, pas toujours un jour d’écriture
 
@@ -176,11 +197,11 @@ python scripts/analyze_vault.py full
 
 Raccourci à la racine : `./analyse.sh full`. `./analyse.sh` lance uniquement le mode incrémental.
 
-Elle pré-indexe d’abord le cycle de vie des fichiers, puis effectue une passe chronologique de classification. Les métadonnées Git sont lues par lots (et non par un processus Git lancé pour chaque commit) ; les déplacements d’un gros commit sont indexés par blocs au lieu d’être tous comparés deux à deux. Dans un terminal, une barre persistante affiche en continu le pourcentage, le nombre de commits, la vitesse, le temps écoulé et l’ETA. Dans des logs redirigés, un jalon est écrit tous les 250 commits. Sur un gros vault, lancez-la directement dans votre terminal. Une interruption ne touche pas au vault et les JSON existants ne sont remplacés qu’à la fin.
+Elle effectue une seule passe chronologique. Les métadonnées Git sont lues par lots et chaque commit ne charge que les blobs des fichiers modifiés. Les requêtes SQLite portent uniquement sur les fingerprints des blocs courants. Dans un terminal, une barre persistante affiche en continu le pourcentage, le nombre de commits, la vitesse, le temps écoulé et l’ETA. Dans des logs redirigés, un jalon est écrit tous les 250 commits.
 
-Un checkpoint est enregistré dans `.cache/full-analysis.checkpoint` tous les 100 commits. Après une interruption, `./analyse.sh full` reprend automatiquement si le miroir, la configuration des projets et la version de l’algorithme sont inchangés. Si l’un d’eux change, le checkpoint est ignoré et la reconstruction repart de zéro. Le checkpoint est supprimé après une génération complète réussie.
+Un checkpoint est enregistré dans `.cache/full-analysis.checkpoint` tous les 100 commits, simultanément à une transaction SQLite. Après une interruption, `./analyse.sh full` reprend uniquement si le checkpoint et le dernier commit enregistré dans l’index coïncident. Le checkpoint est supprimé après une génération complète réussie.
 
-Le mode incrémental exige un `site/data/state.json` valide et ne traite que les commits nouveaux :
+Le mode incrémental exige un `site/data/state.json` et un index SQLite portant le même dernier commit. Git est interrogé directement sur la plage `dernier_commit..HEAD` : la liste de l’historique antérieur n’est pas relue. Dans cette plage, seuls les fichiers modifiés sont chargés :
 
 ```bash
 python scripts/analyze_vault.py incremental
@@ -227,8 +248,8 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - Un signe est un caractère du Markdown brut après décodage UTF-8 ; ce n’est ni un mot ni une lettre normalisée.
 - Sans commit intermédiaire, aucune méthode ne peut retrouver exactement le jour de frappe. Writing Log affiche alors la répartition estimée décrite plus haut.
 - La détection des imports et duplications est une classification fondée sur l’historique disponible. Les valeurs doivent rester contrôlables grâce au chemin racine affiché dans les infobulles.
-- L’état incrémental mémorise les tailles, les identifiants de blobs et les événements nécessaires au recalcul. Les chemins complets des fichiers y sont hachés ; seuls les chemins racines configurés sont exportés pour permettre le contrôle du suivi.
-- Aucun contenu Markdown n’est écrit dans les JSON du site.
+- `state.json` mémorise les tailles, les rythmes observés et les événements nécessaires aux agrégats. L’index SQLite reste dans `.cache/` et n’est pas publié.
+- `duplications.json` expose volontairement les chemins des fichiers et commits d’origine afin de rendre chaque rapprochement contrôlable. Aucun contenu Markdown n’est exporté.
 
 ## Structure des sorties
 
@@ -236,6 +257,7 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - `projects.json` : totaux d’écriture réelle, suppressions éditoriales, temps, taille actuelle et métadonnées de chaque projet ;
 - `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés, temps disponible, statut estimé et dossiers racines par période et projet ;
 - `size_evolution.json` : production réelle cumulée par projet (nom de fichier historique conservé pour compatibilité) ;
+- `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
 - `state.json` : état interne nécessaire au traitement incrémental.
 
 Le dossier `site/` est autonome : il peut être copié et servi tel quel.

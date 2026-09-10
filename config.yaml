@@ -1,5 +1,6 @@
 vault_path: "/Users/thierrycrouzet/Documents/ObsidianLocal/text/"
 history_repo: ".cache/vault-history.git"
+fingerprint_db: ".cache/fingerprints.sqlite3"
 
 excluded_folders:
   - "templates"
@@ -9,12 +10,13 @@ excluded_folders:
 file_extensions: [".md"]
 
 import_detection:
-  # Volume suspect lorsqu'il apparaît dans une fenêtre Git courte.
-  threshold_chars: 1500
-  threshold_window_minutes: 15
+  # Percentile empirique des rythmes déjà observés sur chaque projet.
+  rate_percentile: 99
 
 internal_detection:
-  minimum_move_chars: 200
+  gram_chars: 36
+  selection_chars: 180
+  overlap_threshold: 0.85
 
 session:
   timeout_minutes: 45

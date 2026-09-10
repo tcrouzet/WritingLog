@@ -63,6 +63,27 @@ def list_commits(repo: Path) -> list[Commit]:
     return commits
 
 
+def list_commits_after(repo: Path, sha: str) -> list[Commit]:
+    """Retourne seulement les commits qui ne sont pas atteignables depuis sha."""
+    raw = str(
+        _run(
+            repo,
+            ["log", "--all", "--reverse", "--topo-order", "--format=%H%x00%cI", f"{sha}.."],
+        )
+    )
+    commits: list[Commit] = []
+    for line in raw.splitlines():
+        if not line:
+            continue
+        commit_sha, timestamp = line.split("\0", 1)
+        commits.append(Commit(sha=commit_sha, timestamp=timestamp))
+    return commits
+
+
+def commit_timestamp(repo: Path, sha: str) -> str:
+    return str(_run(repo, ["show", "-s", "--format=%cI", sha])).strip()
+
+
 def list_paths(repo: Path, ref: str = "HEAD") -> list[str]:
     """Liste les fichiers d'un instantané Git sans dépendre du worktree."""
     raw = bytes(_run(repo, ["ls-tree", "-r", "-z", "--name-only", ref], text=False))
