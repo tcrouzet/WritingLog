@@ -164,7 +164,7 @@
   {
     "periode": "2024-W06",
     "projet": "WIP",
-    "signes_reels": 3,
+    "signes_reels": 2,
     "signes_supprimes": 0,
     "dossiers": [
       "WIP"
@@ -186,15 +186,6 @@
     "signes_supprimes": 0,
     "dossiers": [
       "Le roman de mon père"
-    ]
-  },
-  {
-    "periode": "2024-W07",
-    "projet": "WIP",
-    "signes_reels": 1,
-    "signes_supprimes": 0,
-    "dossiers": [
-      "WIP"
     ]
   },
   {
@@ -326,7 +317,7 @@
   {
     "periode": "2024-W16",
     "projet": "tcrouzet",
-    "signes_reels": 6569306,
+    "signes_reels": 6569292,
     "signes_supprimes": 1006042,
     "dossiers": [
       "tcrouzet"
@@ -344,7 +335,7 @@
   {
     "periode": "2024-W17",
     "projet": "tcrouzet",
-    "signes_reels": 95112,
+    "signes_reels": 95077,
     "signes_supprimes": 31183,
     "dossiers": [
       "tcrouzet"
@@ -533,7 +524,7 @@
   {
     "periode": "2024-W26",
     "projet": "WIP",
-    "signes_reels": 50023,
+    "signes_reels": 10777,
     "signes_supprimes": 1547,
     "dossiers": [
       "WIP"
@@ -848,7 +839,7 @@
   {
     "periode": "2024-W49",
     "projet": "Rush",
-    "signes_reels": 15741,
+    "signes_reels": 0,
     "signes_supprimes": 9174,
     "dossiers": [
       "Rush/Manuscrit"
@@ -893,7 +884,7 @@
   {
     "periode": "2024-W50",
     "projet": "Rush",
-    "signes_reels": 49146,
+    "signes_reels": 221,
     "signes_supprimes": 29935,
     "dossiers": [
       "Rush/Manuscrit"
@@ -920,7 +911,7 @@
   {
     "periode": "2024-W51",
     "projet": "Rush",
-    "signes_reels": 1316,
+    "signes_reels": 0,
     "signes_supprimes": 444,
     "dossiers": [
       "Rush/Manuscrit"
@@ -1019,7 +1010,7 @@
   {
     "periode": "2025-W02",
     "projet": "Rush",
-    "signes_reels": 26421,
+    "signes_reels": 16,
     "signes_supprimes": 21031,
     "dossiers": [
       "Rush/Manuscrit"
@@ -1046,7 +1037,7 @@
   {
     "periode": "2025-W03",
     "projet": "Rush",
-    "signes_reels": 4847,
+    "signes_reels": 0,
     "signes_supprimes": 1555,
     "dossiers": [
       "Rush/Manuscrit"
@@ -1136,7 +1127,7 @@
   {
     "periode": "2025-W07",
     "projet": "tcrouzet",
-    "signes_reels": 32191,
+    "signes_reels": 27953,
     "signes_supprimes": 923,
     "dossiers": [
       "tcrouzet"
@@ -1559,7 +1550,7 @@
   {
     "periode": "2025-W30",
     "projet": "WIP",
-    "signes_reels": 22294,
+    "signes_reels": 20844,
     "signes_supprimes": 1795,
     "dossiers": [
       "WIP"
@@ -1586,7 +1577,7 @@
   {
     "periode": "2025-W31",
     "projet": "Isa",
-    "signes_reels": 9794,
+    "signes_reels": 9792,
     "signes_supprimes": 830,
     "dossiers": [
       "Zone/manuscrit"
@@ -1595,7 +1586,7 @@
   {
     "periode": "2025-W31",
     "projet": "WIP",
-    "signes_reels": 5709,
+    "signes_reels": 4600,
     "signes_supprimes": 852,
     "dossiers": [
       "WIP"
@@ -1613,7 +1604,7 @@
   {
     "periode": "2025-W32",
     "projet": "Isa",
-    "signes_reels": 50611,
+    "signes_reels": 40701,
     "signes_supprimes": 5090,
     "dossiers": [
       "Zone/manuscrit"
@@ -1640,7 +1631,7 @@
   {
     "periode": "2025-W33",
     "projet": "Isa",
-    "signes_reels": 50617,
+    "signes_reels": 47541,
     "signes_supprimes": 7522,
     "dossiers": [
       "Zone/manuscrit"
@@ -1667,7 +1658,7 @@
   {
     "periode": "2025-W34",
     "projet": "Isa",
-    "signes_reels": 31234,
+    "signes_reels": 30377,
     "signes_supprimes": 7089,
     "dossiers": [
       "Zone/manuscrit"
@@ -1694,7 +1685,7 @@
   {
     "periode": "2025-W35",
     "projet": "Isa",
-    "signes_reels": 29831,
+    "signes_reels": 23054,
     "signes_supprimes": 9764,
     "dossiers": [
       "Zone/manuscrit"
@@ -1730,7 +1721,7 @@
   {
     "periode": "2025-W36",
     "projet": "Isa",
-    "signes_reels": 35561,
+    "signes_reels": 33508,
     "signes_supprimes": 5242,
     "dossiers": [
       "Zone/manuscrit"
@@ -1748,7 +1739,7 @@
   {
     "periode": "2025-W37",
     "projet": "Isa",
-    "signes_reels": 30889,
+    "signes_reels": 30574,
     "signes_supprimes": 9778,
     "dossiers": [
       "Zone/manuscrit"
@@ -1757,7 +1748,7 @@
   {
     "periode": "2025-W37",
     "projet": "Rush",
-    "signes_reels": 12703,
+    "signes_reels": 12699,
     "signes_supprimes": 11475,
     "dossiers": [
       "Rush/manuscrit"
@@ -1793,7 +1784,7 @@
   {
     "periode": "2025-W38",
     "projet": "Rush",
-    "signes_reels": 5591,
+    "signes_reels": 5504,
     "signes_supprimes": 4822,
     "dossiers": [
       "Rush/manuscrit"
@@ -2000,7 +1991,7 @@
   {
     "periode": "2025-W47",
     "projet": "Rush",
-    "signes_reels": 40,
+    "signes_reels": 20,
     "signes_supprimes": 56,
     "dossiers": [
       "Archives/Rush/manuscrit"
@@ -2054,7 +2045,7 @@
   {
     "periode": "2025-W49",
     "projet": "iT",
-    "signes_reels": 7808,
+    "signes_reels": 361,
     "signes_supprimes": 1196,
     "dossiers": [
       "iT"
@@ -2081,7 +2072,7 @@
   {
     "periode": "2025-W50",
     "projet": "iT",
-    "signes_reels": 85591,
+    "signes_reels": 36660,
     "signes_supprimes": 22863,
     "dossiers": [
       "iT"
@@ -2108,7 +2099,7 @@
   {
     "periode": "2025-W51",
     "projet": "iT",
-    "signes_reels": 117235,
+    "signes_reels": 91197,
     "signes_supprimes": 15267,
     "dossiers": [
       "iT"
@@ -2126,7 +2117,7 @@
   {
     "periode": "2025-W52",
     "projet": "iT",
-    "signes_reels": 104203,
+    "signes_reels": 80919,
     "signes_supprimes": 29398,
     "dossiers": [
       "iT"
@@ -2153,7 +2144,7 @@
   {
     "periode": "2026-W01",
     "projet": "iT",
-    "signes_reels": 53801,
+    "signes_reels": 52706,
     "signes_supprimes": 12606,
     "dossiers": [
       "iT"
@@ -2189,7 +2180,7 @@
   {
     "periode": "2026-W02",
     "projet": "iT",
-    "signes_reels": 71744,
+    "signes_reels": 70701,
     "signes_supprimes": 17686,
     "dossiers": [
       "iT"
@@ -2216,7 +2207,7 @@
   {
     "periode": "2026-W03",
     "projet": "iT",
-    "signes_reels": 63919,
+    "signes_reels": 63203,
     "signes_supprimes": 10485,
     "dossiers": [
       "iT"
@@ -2434,7 +2425,7 @@
   {
     "periode": "2026-W15",
     "projet": "Isa",
-    "signes_reels": 31595,
+    "signes_reels": 27426,
     "signes_supprimes": 1258,
     "dossiers": [
       "Zone/Maison",
@@ -2462,7 +2453,7 @@
   {
     "periode": "2026-W16",
     "projet": "Isa",
-    "signes_reels": 18768,
+    "signes_reels": 12140,
     "signes_supprimes": 2592,
     "dossiers": [
       "Isa/Maison",
@@ -2487,7 +2478,7 @@
   {
     "periode": "2026-W17",
     "projet": "Isa",
-    "signes_reels": 32914,
+    "signes_reels": 26795,
     "signes_supprimes": 4526,
     "dossiers": [
       "Isa/Maison",
@@ -2515,7 +2506,7 @@
   {
     "periode": "2026-W18",
     "projet": "Isa",
-    "signes_reels": 44371,
+    "signes_reels": 40631,
     "signes_supprimes": 6649,
     "dossiers": [
       "Isa/Maison",
@@ -2534,7 +2525,7 @@
   {
     "periode": "2026-W19",
     "projet": "Isa",
-    "signes_reels": 18605,
+    "signes_reels": 17542,
     "signes_supprimes": 3092,
     "dossiers": [
       "Isa/manuscrit"
@@ -2579,7 +2570,7 @@
   {
     "periode": "2026-W21",
     "projet": "Isa",
-    "signes_reels": 23152,
+    "signes_reels": 22943,
     "signes_supprimes": 2658,
     "dossiers": [
       "Isa/manuscrit"
@@ -2597,7 +2588,7 @@
   {
     "periode": "2026-W22",
     "projet": "Isa",
-    "signes_reels": 19121,
+    "signes_reels": 18989,
     "signes_supprimes": 2566,
     "dossiers": [
       "Isa/manuscrit"
@@ -2624,7 +2615,7 @@
   {
     "periode": "2026-W23",
     "projet": "Isa",
-    "signes_reels": 3270,
+    "signes_reels": 3083,
     "signes_supprimes": 1736,
     "dossiers": [
       "Isa/manuscrit"
@@ -2642,7 +2633,7 @@
   {
     "periode": "2026-W24",
     "projet": "Isa",
-    "signes_reels": 35448,
+    "signes_reels": 31392,
     "signes_supprimes": 8784,
     "dossiers": [
       "Isa/archives/manuscritV1",
@@ -2670,7 +2661,7 @@
   {
     "periode": "2026-W25",
     "projet": "Isa",
-    "signes_reels": 45610,
+    "signes_reels": 41488,
     "signes_supprimes": 8574,
     "dossiers": [
       "Isa/manuscrit"
@@ -2688,7 +2679,7 @@
   {
     "periode": "2026-W26",
     "projet": "Isa",
-    "signes_reels": 50690,
+    "signes_reels": 47097,
     "signes_supprimes": 26934,
     "dossiers": [
       "Isa/manuscrit"
@@ -2715,7 +2706,7 @@
   {
     "periode": "2026-W27",
     "projet": "Isa",
-    "signes_reels": 7078,
+    "signes_reels": 6919,
     "signes_supprimes": 2819,
     "dossiers": [
       "Isa/manuscrit"
@@ -2742,7 +2733,7 @@
   {
     "periode": "2026-W28",
     "projet": "Isa",
-    "signes_reels": 8001,
+    "signes_reels": 7819,
     "signes_supprimes": 3092,
     "dossiers": [
       "Isa/manuscrit"
@@ -2769,7 +2760,7 @@
   {
     "periode": "2026-W29",
     "projet": "Isa",
-    "signes_reels": 4574,
+    "signes_reels": 4468,
     "signes_supprimes": 1768,
     "dossiers": [
       "Isa/manuscrit"
@@ -2814,7 +2805,7 @@
   {
     "periode": "2026-W31",
     "projet": "Isa",
-    "signes_reels": 383,
+    "signes_reels": 379,
     "signes_supprimes": 66,
     "dossiers": [
       "Isa/manuscrit"
