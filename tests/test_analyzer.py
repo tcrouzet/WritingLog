@@ -717,6 +717,40 @@ output_dir: site
         ]
         self.assertEqual(sizes, [len(source_text), len(source_text), len(source_text)])
 
+    def test_temporary_compilation_lifecycle_survives_a_rename(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        sentences = [
+            " ".join(f"source{index}-mot{word}" for word in range(24)) + ". "
+            for index in range(50)
+        ]
+        source_text = "".join(sentences)
+        (manuscript / "chapters.md").write_text(source_text, encoding="utf-8")
+        self.commit("source chapters", "2026-01-01T10:00:00+01:00")
+
+        first_name = manuscript / "fusion-0606.md"
+        compiled_text = "".join(sentences[:40]) + self.text(2000, seed=202)
+        first_name.write_text(compiled_text, encoding="utf-8")
+        self.commit("temporary compilation", "2026-01-02T10:15:00+01:00")
+        second_name = manuscript / "fusion-0831.md"
+        first_name.rename(second_name)
+        self.commit("rename temporary compilation", "2026-01-03T10:15:00+01:00")
+        second_name.unlink()
+        self.commit("delete renamed compilation", "2026-01-04T10:30:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len(source_text))
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(
+            sizes,
+            [len(source_text), len(source_text), len(source_text), len(source_text)],
+        )
+
     def test_edited_add_delete_pair_is_treated_as_a_rename(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)

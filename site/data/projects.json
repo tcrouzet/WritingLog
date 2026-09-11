@@ -20,7 +20,7 @@
   {
     "id": "Carnets",
     "title": "Carnets",
-    "signes_reels_total": 17375,
+    "signes_reels_total": 17282,
     "signes_supprimes_total": 8296,
     "taille_actuelle": 3912593,
     "date_creation": "2024-01-04T18:56:16+01:00",
@@ -57,9 +57,9 @@
       "Isa/archives/manuscritV1"
     ],
     "id": "Isa",
-    "signes_reels_total": 653543,
+    "signes_reels_total": 651441,
     "signes_supprimes_total": 128704,
-    "taille_actuelle": 327878,
+    "taille_actuelle": 332499,
     "date_creation": "2025-08-02T10:38:31+02:00",
     "derniere_activite": "2026-09-11T08:00:51+02:00"
   },
@@ -94,7 +94,7 @@
     "title": "Rush",
     "folder": "Archives/Rush/manuscrit",
     "id": "Rush",
-    "signes_reels_total": 133307,
+    "signes_reels_total": 117081,
     "signes_supprimes_total": 78702,
     "taille_actuelle": 0,
     "date_creation": "2024-12-07T10:03:41+01:00",
@@ -105,16 +105,16 @@
     "title": "WIP",
     "signes_reels_total": 3681295,
     "signes_supprimes_total": 140626,
-    "taille_actuelle": 2256254,
+    "taille_actuelle": 2253539,
     "date_creation": "2024-01-13T18:39:59+01:00",
     "derniere_activite": "2026-03-06T21:30:04+01:00"
   },
   {
     "id": "iT",
     "title": "iT",
-    "signes_reels_total": 585094,
+    "signes_reels_total": 582464,
     "signes_supprimes_total": 139352,
-    "taille_actuelle": 679634,
+    "taille_actuelle": 679808,
     "date_creation": "2025-12-07T09:49:51+01:00",
     "derniere_activite": "2026-04-08T16:58:10+02:00"
   },
@@ -123,7 +123,7 @@
     "title": "tcrouzet",
     "signes_reels_total": 26878793,
     "signes_supprimes_total": 1486440,
-    "taille_actuelle": 15858790,
+    "taille_actuelle": 15845373,
     "date_creation": "2024-04-18T18:48:49+02:00",
     "derniere_activite": "2026-09-08T12:42:20+02:00"
   }

@@ -146,7 +146,7 @@
   {
     "periode": "2024-04",
     "projet": "Carnets",
-    "signes_reels": 17369,
+    "signes_reels": 17276,
     "signes_supprimes": 8296,
     "dossiers": [
       "Carnets"
@@ -371,7 +371,7 @@
   {
     "periode": "2024-12",
     "projet": "Rush",
-    "signes_reels": 76967,
+    "signes_reels": 66325,
     "signes_supprimes": 39553,
     "dossiers": [
       "Rush/Manuscrit"
@@ -416,7 +416,7 @@
   {
     "periode": "2025-01",
     "projet": "Rush",
-    "signes_reels": 36220,
+    "signes_reels": 31268,
     "signes_supprimes": 22586,
     "dossiers": [
       "Rush/Manuscrit"
@@ -632,7 +632,7 @@
   {
     "periode": "2025-08",
     "projet": "Isa",
-    "signes_reels": 179842,
+    "signes_reels": 179607,
     "signes_supprimes": 30295,
     "dossiers": [
       "Zone/manuscrit"
@@ -677,7 +677,7 @@
   {
     "periode": "2025-09",
     "projet": "Isa",
-    "signes_reels": 66698,
+    "signes_reels": 66673,
     "signes_supprimes": 15020,
     "dossiers": [
       "Zone/manuscrit"
@@ -740,7 +740,7 @@
   {
     "periode": "2025-10",
     "projet": "Rush",
-    "signes_reels": 704,
+    "signes_reels": 72,
     "signes_supprimes": 156,
     "dossiers": [
       "Archives/Rush/manuscrit",
@@ -822,7 +822,7 @@
   {
     "periode": "2025-12",
     "projet": "iT",
-    "signes_reels": 342515,
+    "signes_reels": 342361,
     "signes_supprimes": 72655,
     "dossiers": [
       "iT"
@@ -867,7 +867,7 @@
   {
     "periode": "2026-01",
     "projet": "iT",
-    "signes_reels": 242398,
+    "signes_reels": 239922,
     "signes_supprimes": 66225,
     "dossiers": [
       "iT"
@@ -930,7 +930,7 @@
   {
     "periode": "2026-04",
     "projet": "Isa",
-    "signes_reels": 124189,
+    "signes_reels": 123724,
     "signes_supprimes": 14419,
     "dossiers": [
       "Isa/Maison",
@@ -973,7 +973,7 @@
   {
     "periode": "2026-05",
     "projet": "Isa",
-    "signes_reels": 86479,
+    "signes_reels": 85961,
     "signes_supprimes": 12977,
     "dossiers": [
       "Isa/manuscrit"
@@ -1000,7 +1000,7 @@
   {
     "periode": "2026-06",
     "projet": "Isa",
-    "signes_reels": 137495,
+    "signes_reels": 136636,
     "signes_supprimes": 46642,
     "dossiers": [
       "Isa/archives/manuscritV1",

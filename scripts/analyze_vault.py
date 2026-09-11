@@ -692,6 +692,22 @@ def process_history_diff(
                 lifecycle = file_lifecycles.setdefault(
                     lifecycle_key, {"additions": 0, "deletions": 0}
                 ) if lifecycle_key else {"additions": 0, "deletions": 0}
+                # Un export temporaire peut être renommé plusieurs fois avant
+                # sa suppression. Son cycle de vie doit suivre le fichier ;
+                # sinon la suppression finale ne retrouve jamais sa création et
+                # sa taille reste définitivement injectée dans la courbe.
+                if (
+                    change.status == "R"
+                    and old_path
+                    and new_path
+                    and old_path != new_path
+                ):
+                    old_lifecycle = file_lifecycles.setdefault(
+                        path_key(old_path), {"additions": 0, "deletions": 0}
+                    )
+                    active_creation = old_lifecycle.pop("active_creation", None)
+                    if active_creation:
+                        lifecycle["active_creation"] = active_creation
                 reappeared_file = bool(
                     change.status == "A"
                     and lifecycle["additions"] > 0
