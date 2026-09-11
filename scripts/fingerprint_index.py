@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, deque
 import hashlib
+import json
 from pathlib import Path
 import re
 import sqlite3
@@ -69,7 +70,9 @@ class FingerprintIndex:
                 "DROP TABLE IF EXISTS active_file_hashes; "
                 "DROP TABLE IF EXISTS fingerprint_origins; "
                 "DROP TABLE IF EXISTS fingerprints; "
-                "DROP TABLE IF EXISTS commits;"
+                "DROP TABLE IF EXISTS commits; "
+                "DROP TABLE IF EXISTS analysis_state; "
+                "DROP TABLE IF EXISTS web_data;"
             )
         self._create_schema()
 
@@ -118,6 +121,11 @@ class FingerprintIndex:
                 ON deletion_candidate_hashes(hash);
             CREATE INDEX IF NOT EXISTS idx_deletion_candidate_id
                 ON deletion_candidate_hashes(candidate_id);
+            CREATE TABLE IF NOT EXISTS analysis_state (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
 
@@ -125,7 +133,24 @@ class FingerprintIndex:
         self.connection.executescript(
             "DELETE FROM deletion_candidate_hashes; DELETE FROM active_file_hashes; "
             "DELETE FROM fingerprint_origins; DELETE FROM fingerprints; "
-            "DELETE FROM commits;"
+            "DELETE FROM commits; DELETE FROM analysis_state;"
+        )
+
+    def load_analysis_state(self) -> dict | None:
+        row = self.connection.execute(
+            "SELECT payload FROM analysis_state WHERE id = 1"
+        ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_analysis(self, state: dict) -> None:
+        """Enregistre l'état analytique autoritaire."""
+        self.connection.execute("DROP TABLE IF EXISTS web_data")
+        self.connection.execute(
+            "INSERT INTO analysis_state(id, payload, updated_at) "
+            "VALUES(1, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, "
+            "updated_at=CURRENT_TIMESTAMP",
+            (json.dumps(state, ensure_ascii=False, separators=(",", ":")),),
         )
 
     def _chunks(self, values: list[str], size: int | None = None) -> Iterable[list[str]]:
@@ -194,7 +219,7 @@ class FingerprintIndex:
         return result
 
     def add_deletion_candidate(self, candidate_id: str, hashes: Iterable[str]) -> None:
-        """Conserve les fingerprints d'une suppression sans les placer dans state.json."""
+        """Conserve les fingerprints d'une suppression hors du blob d'état."""
         self.connection.executemany(
             "INSERT INTO deletion_candidate_hashes(candidate_id, hash) VALUES(?, ?)",
             ((candidate_id, value) for value in hashes),

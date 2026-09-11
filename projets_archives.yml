@@ -1,21 +1,21 @@
 01-Blog:
-  title: 01-Blog
-  folder: Archives/Blog
-13-Épicènes:
-  title: 13-Épicènes
-  folder: Archives/Épicènes
+  title: "01-Blog"
+  folder: "Archives/Blog"
+"13-Épicènes":
+  title: "13-Épicènes"
+  folder: "Archives/Épicènes"
 24-Archives:
-  title: 24-Archives
-  folder: Archives/26-100 raisons de ne pas voter
+  title: "24-Archives"
+  folder: "Archives/26-100 raisons de ne pas voter"
 Blog:
-  title: Blog
-  folder: Archives/Blog
+  title: "Blog"
+  folder: "Archives/Blog"
 CodeH:
-  title: CodeH
-  folder: Archives/CodeH/Manuscrit
+  title: "CodeH"
+  folder: "Archives/CodeH/Manuscrit"
 Tract:
-  title: Tract
-  folder: Archives/Tract
-Épicènes:
-  title: Épicènes
-  folder: Archives/Épicènes
+  title: "Tract"
+  folder: "Archives/Tract"
+"Épicènes":
+  title: "Épicènes"
+  folder: "Archives/Épicènes"

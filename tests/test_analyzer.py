@@ -15,13 +15,12 @@ from contextlib import redirect_stderr
 
 ROOT = Path(__file__).resolve().parents[1]
 ANALYZER = ROOT / "scripts" / "analyze_vault.py"
+DATA_EXPORTER = ROOT / "scripts" / "export_data.py"
+WEB_BUILDER = ROOT / "scripts" / "web.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from analyze_vault import (
-    aggregate,
-    character_changes,
-    classification_blocks,
-    load_state,
-)
+from analyze_vault import character_changes, classification_blocks, load_state
+from export_data import aggregate
+from fingerprint_index import FingerprintIndex
 
 
 class AnalyzerIntegrationTest(unittest.TestCase):
@@ -70,9 +69,27 @@ output_dir: site
         )
         if expect_success and result.returncode:
             self.fail(result.stderr or result.stdout)
+        if result.returncode == 0 and "--dry-run" not in args:
+            export_result = subprocess.run(
+                [sys.executable, str(DATA_EXPORTER), "--config", str(self.root / "config.yaml")],
+                text=True,
+                capture_output=True,
+            )
+            if export_result.returncode:
+                self.fail(export_result.stderr or export_result.stdout)
+            web_result = subprocess.run(
+                [sys.executable, str(WEB_BUILDER), "--config", str(self.root / "config.yaml")],
+                text=True,
+                capture_output=True,
+            )
+            if web_result.returncode:
+                self.fail(web_result.stderr or web_result.stdout)
         return result
 
     def load(self, name: str):
+        if name == "state.json":
+            with FingerprintIndex(self.root / ".cache" / "fingerprints.sqlite3") as database:
+                return database.load_analysis_state()
         return json.loads((self.root / "site" / "data" / name).read_text(encoding="utf-8"))
 
     @staticmethod
@@ -80,6 +97,59 @@ output_dir: site
         randomizer = random.Random(seed)
         alphabet = "abcdefghijklmnopqrstuvwxyz     ,.;!?"
         return "".join(randomizer.choice(alphabet) for _ in range(length))
+
+    def test_analysis_writes_sqlite_and_web_builder_alone_writes_json(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "chapter.md").write_text("texte", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+
+        analysis = subprocess.run(
+            [
+                sys.executable,
+                str(ANALYZER),
+                "--config",
+                str(self.root / "config.yaml"),
+                "full",
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(analysis.returncode, 0, analysis.stderr)
+        self.assertFalse((self.root / "site" / "data").exists())
+        with FingerprintIndex(self.root / ".cache" / "fingerprints.sqlite3") as database:
+            self.assertIsNotNone(database.load_analysis_state())
+            web_table = database.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_data'"
+            ).fetchone()
+            self.assertIsNone(web_table)
+
+        export = subprocess.run(
+            [
+                sys.executable,
+                str(DATA_EXPORTER),
+                "--config",
+                str(self.root / "config.yaml"),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(export.returncode, 0, export.stderr)
+        self.assertTrue((self.root / "site" / "data" / "projects.json").exists())
+        self.assertFalse((self.root / "site" / "data" / "state.json").exists())
+
+        web = subprocess.run(
+            [
+                sys.executable,
+                str(WEB_BUILDER),
+                "--config",
+                str(self.root / "config.yaml"),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(web.returncode, 0, web.stderr)
+        self.assertTrue((self.root / "site" / "index.html").exists())
 
     def test_full_history_import_sessions_move_delete_and_incremental(self) -> None:
         alpha = self.vault / "Alpha"
@@ -200,17 +270,16 @@ output_dir: site
         self.assertEqual(curve, [100, len(passage), len(passage)])
 
     def test_legacy_size_state_migrates_to_the_historical_mapping(self) -> None:
-        state_path = self.root / "legacy-state.json"
-        state_path.write_text(
-            json.dumps({
+        database_path = self.root / "legacy.sqlite3"
+        with FingerprintIndex(database_path) as database:
+            database.save_analysis({
                 "config_fingerprint": "same",
                 "project_sizes": {"Alpha": 100},
                 "historical_project_sizes": {"Alpha": 125000},
-            }),
-            encoding="utf-8",
-        )
+            })
+            database.commit()
 
-        state = load_state(state_path, "same", False, {})
+        state = load_state(database_path, "same", False, {})
 
         self.assertEqual(state["project_sizes"], {"Alpha": 125000})
         self.assertNotIn("historical_project_sizes", state)
@@ -375,10 +444,12 @@ output_dir: site
         self.assertEqual(rows["2026-01-04"], quotient + (1 if remainder >= 2 else 0))
         self.assertEqual(rows["2026-01-05"], quotient + (1 if remainder >= 1 else 0))
 
-        state_path = self.root / "site" / "data" / "state.json"
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        state["version"] = 13
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+        database_path = self.root / ".cache" / "fingerprints.sqlite3"
+        with FingerprintIndex(database_path) as database:
+            state = database.load_analysis_state()
+            state["version"] = 13
+            database.save_analysis(state)
+            database.commit()
 
         result = self.analyze()
         self.assertEqual(result.returncode, 0)
@@ -595,7 +666,7 @@ output_dir: site
         }
         error = io.StringIO()
         with redirect_stderr(error):
-            aggregate(state, {}, {"Alpha": {}})
+            aggregate(state, {"Alpha": {}})
         self.assertIn("Avertissement : Alpha", error.getvalue())
 
     def test_edited_move_reuses_index_and_keeps_new_delta_as_production(self) -> None:

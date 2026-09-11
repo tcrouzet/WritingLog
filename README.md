@@ -56,7 +56,7 @@ Utilisation courante — synchroniser les nouveaux commits locaux puis lancer l�
 ./web.sh
 ```
 
-`./cache.sh` supprime et recrée le miroir Git local. `./cache.sh update` conserve le miroir existant et y ajoute les nouveaux commits. Il annonce explicitement s’il n’existe aucun ajout ou combien de commits ont été récupérés, affiche jusqu’aux dix derniers avec leur SHA, leur date et leur message, puis indique le changement de `HEAD`. `./analyse.sh full` purge l’index et rejoue systématiquement tout l’historique depuis le premier commit. `./analyse.sh` ne traite que les commits postérieurs au dernier commit enregistré. `./web.sh` ne lance ni analyse ni serveur : il génère uniquement les fichiers statiques de `site/` en conservant `site/data/`.
+`./cache.sh` supprime et recrée le miroir Git local. `./cache.sh update` conserve le miroir existant et y ajoute les nouveaux commits. Il annonce explicitement s’il n’existe aucun ajout ou combien de commits ont été récupérés, affiche jusqu’aux dix derniers avec leur SHA, leur date et leur message, puis indique le changement de `HEAD`. `./analyse.sh full` purge la base d’analyse et rejoue systématiquement tout l’historique depuis le premier commit. `./analyse.sh` ne traite que les commits postérieurs au dernier commit enregistré. Ces deux commandes écrivent exclusivement dans SQLite. `./web.sh` ne lance ni analyse ni serveur : il exporte les JSON depuis SQLite puis génère les fichiers statiques de `site/`.
 
 ## Installation
 
@@ -199,7 +199,7 @@ Elle effectue une seule passe chronologique. Les métadonnées Git sont lues par
 
 Un `full` interrompu ne conserve aucun état partiel : sa transaction SQLite est abandonnée. Le prochain `full` purge de nouveau l’index et repart du premier commit.
 
-Le mode incrémental n’utilise aucun numéro de version d’analyse. La table SQLite `commits` contient chaque commit déjà traité, son horodatage Git et la date de son analyse. Son dernier enregistrement est le curseur de reprise ; il doit correspondre au `last_commit` du fichier `site/data/state.json`. La table `fingerprint_origins` contient une seule ligne par hash et l’attache définitivement au premier commit, projet et fichier où il a été rencontré. La table `fingerprints` conserve séparément toutes ses occurrences successives. Git est alors interrogé directement sur la plage `last_commit..HEAD` : la liste de l’historique antérieur n’est pas relue. Dans cette plage, seuls les fichiers modifiés sont chargés :
+Le mode incrémental n’utilise aucun numéro de version d’analyse. La table SQLite `commits` contient chaque commit déjà traité, son horodatage Git et la date de son analyse. Son dernier enregistrement est le curseur de reprise ; il doit correspondre au `last_commit` de la table SQLite `analysis_state`. La table `fingerprint_origins` contient une seule ligne par hash et l’attache définitivement au premier commit, projet et fichier où il a été rencontré. La table `fingerprints` conserve séparément toutes ses occurrences successives. Git est alors interrogé directement sur la plage `last_commit..HEAD` : la liste de l’historique antérieur n’est pas relue. Dans cette plage, seuls les fichiers modifiés sont chargés :
 
 ```bash
 python scripts/analyze_vault.py incremental
@@ -220,20 +220,29 @@ python scripts/analyze_vault.py full --config /chemin/config.yaml
 python scripts/analyze_vault.py incremental --dry-run
 ```
 
-`--dry-run` analyse et valide les données sans écrire les JSON. Le dashboard livré contient un petit jeu de démonstration ; la première analyse le remplace.
+`--dry-run` analyse et valide les données sans enregistrer le nouvel état dans SQLite. Aucun JSON n’est produit par l’analyse.
 
-Chaque analyse génère aussi `projets_archives.yml`. Ce fichier recense les projets historiques désormais déplacés sous `Archives`, avec leur `folder` complet (le sous-dossier `manuscrit` est choisi automatiquement lorsqu’il existe). Pour en suivre un, copiez son bloc dans `projet.yml`, modifiez éventuellement son `title`, puis lancez `python scripts/analyze_vault.py full`.
+Chaque export web génère aussi `projets_archives.yml`. Ce fichier recense les projets historiques désormais déplacés sous `Archives`, avec leur `folder` complet (le sous-dossier `manuscrit` est choisi automatiquement lorsqu’il existe). Pour en suivre un, copiez son bloc dans `projet.yml`, modifiez éventuellement son `title`, puis relancez une analyse complète et l’export.
 
 ## Générer le site web
 
-La génération des JSON et celle du site web sont deux commandes indépendantes :
+L’analyse SQLite et la génération du site web sont deux commandes indépendantes :
 
 ```bash
 ./analyse.sh
 ./web.sh
 ```
 
-`./analyse.sh` met à jour uniquement `site/data/*.json`. `./web.sh` copie les sources de `web/` vers `site/`, sans modifier les JSON et sans démarrer de serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
+`./analyse.sh` met à jour exclusivement `.cache/fingerprints.sqlite3` et ne touche jamais `site/`. La base contient l’état analytique brut et incrémental dans `analysis_state` ; aucune vue web ni aucun JSON n’y est sérialisé.
+
+Les deux opérations web sont elles-mêmes séparées :
+
+```bash
+.venv-web/bin/python scripts/export_data.py
+.venv-web/bin/python scripts/web.py
+```
+
+`export_data.py` lit SQLite, calcule les agrégats d’affichage et remplace `site/data/*.json`. `web.py` copie uniquement HTML, CSS, JavaScript et images depuis `web/` vers `site/`. `./web.sh` enchaîne ces deux commandes par commodité, sans relire Git, reclasser le texte ou démarrer un serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
 
 Le filtre principal permet d’isoler un projet. Le graphique « Production » regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi.
 
@@ -248,7 +257,7 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - Un signe est un caractère du Markdown brut après décodage UTF-8 ; ce n’est ni un mot ni une lettre normalisée.
 - Sans commit intermédiaire, aucune méthode ne peut retrouver exactement le jour de frappe. Writing Log affiche alors la répartition estimée décrite plus haut.
 - La détection des duplications dépend de l’historique disponible. Un texte provenant de l’extérieur du vault est impossible à distinguer d’un texte frappé : tous deux possèdent des fingerprints nouveaux.
-- `state.json` mémorise les tailles et les événements nécessaires aux agrégats. L’index SQLite reste dans `.cache/` et n’est pas publié.
+- La table SQLite `analysis_state` mémorise les tailles et les événements nécessaires au traitement incrémental. Elle reste dans `.cache/` et n’est jamais publiée.
 - `duplications.json` expose volontairement les chemins des fichiers et commits d’origine afin de rendre chaque rapprochement contrôlable. Aucun contenu Markdown n’est exporté.
 
 ## Structure des sorties
@@ -258,6 +267,7 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
 - `size_evolution.json` : taille logique du manuscrit au dernier commit de chaque jour et par projet ;
 - `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
-- `state.json` : état interne nécessaire au traitement incrémental.
+
+`state.json` n’est plus généré : l’état interne reste exclusivement dans SQLite.
 
 Le dossier `site/` est autonome : il peut être copié et servi tel quel.

@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Analyse l'historique Git d'un vault et produit les JSON du dashboard."""
+"""Analyse l'historique Git d'un vault et enregistre son état dans SQLite."""
 
 from __future__ import annotations
 
 import argparse
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from difflib import SequenceMatcher
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
 import sys
+import tempfile
 import time
 from typing import Any, Iterable
 
 try:
     import yaml
 except ImportError:
-    print("PyYAML manque. Lancez : python -m pip install -r scripts/requirements.txt", file=sys.stderr)
-    raise SystemExit(2)
+    yaml = None
+YAMLError = yaml.YAMLError if yaml is not None else RuntimeError
 
 from fingerprint_index import FingerprintIndex, winnowed_hashes
 from git_utils import (
@@ -90,6 +91,10 @@ class ProgressBar:
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
+    if yaml is None:
+        raise RuntimeError(
+            "PyYAML manque. Lancez : python -m pip install -r scripts/requirements.txt"
+        )
     if not path.exists():
         return {}
     with path.open(encoding="utf-8") as handle:
@@ -110,23 +115,6 @@ def json_compatible(value: Any) -> Any:
     if hasattr(value, "isoformat") and value.__class__.__module__ == "datetime":
         return value.isoformat()
     return value
-
-
-def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=False)
-        handle.write("\n")
-    temporary.replace(path)
-
-
-def write_yaml(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(value, handle, allow_unicode=True, sort_keys=False)
-    temporary.replace(path)
 
 
 def path_key(path: str) -> str:
@@ -497,17 +485,19 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
 
 
 def load_state(
-    path: Path,
+    database: Path,
     fingerprint: str,
     full_rebuild: bool,
     config: dict[str, Any],
 ) -> dict[str, Any]:
     if full_rebuild:
         return empty_state(fingerprint)
-    if not path.exists():
-        raise ValueError("État incrémental absent ; lancez d'abord : python scripts/analyze_vault.py full")
-    with path.open(encoding="utf-8") as handle:
-        state = json.load(handle)
+    if not database.exists():
+        raise ValueError("Base d'analyse absente ; lancez d'abord : ./analyse.sh full")
+    with FingerprintIndex(database) as index:
+        state = index.load_analysis_state()
+    if not state:
+        raise ValueError("État d'analyse absent de SQLite ; lancez d'abord : ./analyse.sh full")
     # Vestige des anciens états versionnés : il n'intervient plus dans la
     # reprise incrémentale et disparaît à la prochaine écriture.
     state.pop("version", None)
@@ -560,7 +550,7 @@ def process_history_diff(
         if not previous:
             raise ValueError("Index des commits traités absent ; lancez ./analyse.sh full.")
         if state.get("last_commit") != previous:
-            raise ValueError("L'index SQLite ne correspond pas à state.json ; relancez ./analyse.sh full.")
+            raise ValueError("L'index SQLite et son état d'analyse divergent ; relancez ./analyse.sh full.")
         if not commit_exists(repo, previous):
             raise ValueError("Le dernier commit traité n'est plus dans l'historique ; lancez ./analyse.sh full.")
         pending = list_commits_after(repo, previous)
@@ -1078,244 +1068,12 @@ def process_history_diff(
     return len(pending), relevant_commits
 
 
-def period_keys(timestamp: str) -> tuple[str, str, str]:
-    moment = datetime.fromisoformat(timestamp)
-    day = moment.date().isoformat()
-    iso = moment.isocalendar()
-    week = f"{iso.year}-W{iso.week:02d}"
-    month = f"{moment.year:04d}-{moment.month:02d}"
-    return day, week, month
-
-
-def production_days(interval_start: str | None, timestamp: str) -> list[str]:
-    """Jours auxquels rattacher un travail regroupé dans un commit espacé."""
-    end_day = datetime.fromisoformat(timestamp).date()
-    if not interval_start:
-        return [end_day.isoformat()]
-    start_day = datetime.fromisoformat(interval_start).date()
-    if start_day >= end_day:
-        return [end_day.isoformat()]
-    cursor = start_day + timedelta(days=1)
-    days: list[str] = []
-    while cursor <= end_day:
-        days.append(cursor.isoformat())
-        cursor += timedelta(days=1)
-    return days
-
-
-def split_integer_over_days(value: int, days: list[str]) -> Iterable[tuple[str, int]]:
-    """Répartit exactement un nombre de signes, reste affecté aux jours récents."""
-    quotient, remainder = divmod(value, len(days))
-    first_extra = len(days) - remainder
-    for index, day in enumerate(days):
-        yield day, quotient + (1 if index >= first_extra else 0)
-
-
-def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
-    events = sorted(state["events"], key=lambda item: (item["timestamp"], item["commit"], item["project"]))
-    active_projects = {project for project, size in state["project_sizes"].items() if int(size) > 0}
-    known_projects = {event["project"] for event in events}
-    selected_projects = {str(project).casefold() for project in metadata}
-    active_projects.update(project for project in known_projects if project.casefold() in selected_projects)
-    daily: dict[tuple[str, str], dict[str, Any]] = defaultdict(
-        lambda: {
-            "signes_reels": 0,
-            "signes_supprimes": 0,
-            "dossiers": set(),
-        }
-    )
-    events_by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for event in events:
-        if event["project"] not in active_projects:
-            continue
-        if int(event.get("real_chars", 0)) <= 0 and int(event.get("edit_delta", 0)) >= 0:
-            continue
-        events_by_project[event["project"]].append(event)
-        real_chars = int(event["real_chars"])
-        deleted_chars = max(0, -int(event.get("edit_delta", 0)))
-        days = production_days(event.get("interval_start"), event["timestamp"])
-        for day, chars in split_integer_over_days(real_chars, days):
-            daily[(day, event["project"])]["signes_reels"] += chars
-            daily[(day, event["project"])]["dossiers"].update(event.get("folders", []))
-        for day, chars in split_integer_over_days(deleted_chars, days):
-            daily[(day, event["project"])]["signes_supprimes"] += chars
-
-    daily_rows = [
-        {
-            "periode": period,
-            "projet": project,
-            "signes_reels": int(values["signes_reels"]),
-            "signes_supprimes": int(values["signes_supprimes"]),
-            "dossiers": sorted(values["dossiers"]),
-        }
-        for (period, project), values in sorted(daily.items())
-    ]
-
-    def rollup(kind: str) -> list[dict[str, Any]]:
-        rolled: dict[tuple[str, str], dict[str, Any]] = defaultdict(
-            lambda: {"signes_reels": 0, "signes_supprimes": 0, "dossiers": set()}
-        )
-        for row in daily_rows:
-            day = datetime.fromisoformat(row["periode"])
-            if kind == "week":
-                iso = day.isocalendar()
-                period = f"{iso.year}-W{iso.week:02d}"
-            else:
-                period = f"{day.year:04d}-{day.month:02d}"
-            values = rolled[(period, row["projet"])]
-            values["signes_reels"] += row["signes_reels"]
-            values["signes_supprimes"] += row["signes_supprimes"]
-            values["dossiers"].update(row.get("dossiers", []))
-        return [
-            {"periode": p, "projet": project, "signes_reels": int(v["signes_reels"]), "signes_supprimes": int(v["signes_supprimes"]), "dossiers": sorted(v["dossiers"])}
-            for (p, project), v in sorted(rolled.items())
-        ]
-
-    projects: list[dict[str, Any]] = []
-    all_projects = sorted(active_projects)
-    metadata_folded = {str(key).casefold(): value for key, value in metadata.items()}
-    for project in all_projects:
-        project_events = events_by_project.get(project, [])
-        custom = metadata.get(project, metadata_folded.get(project.casefold(), {}))
-        custom = custom if isinstance(custom, dict) else {}
-        real_total = sum(int(event["real_chars"]) for event in project_events)
-        deleted_total = sum(max(0, -int(event.get("edit_delta", 0))) for event in project_events)
-        historical_added_total = sum(
-            int(event.get("real_chars", 0))
-            + int(event.get("import_chars", 0))
-            + int(event.get("internal_chars", 0))
-            for event in project_events
-        )
-        if deleted_total > historical_added_total:
-            print(
-                f"Avertissement : {project} totalise {deleted_total} signes supprimés, "
-                f"davantage que les {historical_added_total} signes ajoutés au fil de son histoire.",
-                file=sys.stderr,
-            )
-        projects.append({
-            **custom,
-            "id": project,
-            "title": custom.get("title", project),
-            "signes_reels_total": real_total,
-            "signes_supprimes_total": deleted_total,
-            "taille_actuelle": max(
-                0,
-                int(state["project_sizes"].get(project, 0))
-                - sum(
-                    int(active.get("size", 0))
-                    for lifecycle in state.get("file_lifecycles", {}).values()
-                    if (active := lifecycle.get("active_creation"))
-                    and active.get("project") == project
-                    and active.get("excluded_from_size")
-                ),
-            ),
-            "date_creation": project_events[0]["timestamp"] if project_events else None,
-            "derniere_activite": project_events[-1]["timestamp"] if project_events else None,
-        })
-
-    # Taille logique du manuscrit : contenu physique moins les compilations et
-    # doublons reconnus. Plusieurs commits le même jour sont ramenés au dernier
-    # état connu.
-    daily_sizes: dict[tuple[str, str], int] = {}
-    for point in sorted(
-        state.get("size_points", []),
-        key=lambda item: (item["timestamp"], item["commit"], item["project"]),
-    ):
-        day = datetime.fromisoformat(point["timestamp"]).date().isoformat()
-        daily_sizes[(day, point["project"])] = int(point["size"])
-    sizes = [
-        {"date": day, "projet": project, "taille_signes": size}
-        for (day, project), size in sorted(daily_sizes.items())
-        if project in active_projects
-    ]
-
-    total_real = sum(project["signes_reels_total"] for project in projects)
-    total_deleted = sum(project["signes_supprimes_total"] for project in projects)
-    cutoff = datetime.now().astimezone().date() - timedelta(days=30)
-    recent_scores: dict[str, float] = defaultdict(float)
-    for row in daily_rows:
-        if datetime.fromisoformat(row["periode"]).date() >= cutoff:
-            recent_scores[row["projet"]] += row["signes_reels"]
-    most_active = max(recent_scores, key=recent_scores.get) if recent_scores else None
-    title_by_id = {project["id"]: project["title"] for project in projects}
-    overview = {
-        "signes_reels_total": total_real,
-        "signes_supprimes_total": total_deleted,
-        "nombre_projets": len(projects),
-        "projet_plus_actif_30_jours": most_active,
-        "projet_plus_actif_30_jours_titre": title_by_id.get(most_active) if most_active else None,
-        "derniere_mise_a_jour": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "dernier_commit": state.get("last_commit"),
-    }
-    duplications = [
-        {
-            "timestamp": event["timestamp"],
-            "commit": event["commit"],
-            "projet": event["project"],
-            "signes": int(event.get("internal_chars", 0)),
-            "blocs": event.get("duplication_sources", []),
-        }
-        for event in events
-        if event.get("duplication_sources")
-    ]
-    return {
-        "overview": overview,
-        "projects": projects,
-        "daily": daily_rows,
-        "weekly": rollup("week"),
-        "monthly": rollup("month"),
-        "size_evolution": sizes,
-        "duplications": duplications,
-    }
-
-
-def archived_project_candidates(
-    vault: Path,
-    state: dict[str, Any],
-    metadata: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
-    """Liste les anciens projets correspondant à un dossier actuel d'Archives."""
-    selected = {str(project).casefold() for project in metadata}
-    history = {event["project"] for event in state["events"]}
-    inactive = {project for project in history if int(state["project_sizes"].get(project, 0)) == 0}
-
-    archive_root = next(
-        (item for item in vault.iterdir() if item.is_dir() and item.name.casefold() == "archives"),
-        None,
-    )
-    archive_folders: dict[str, str] = {}
-    if archive_root:
-        for item in archive_root.iterdir():
-            if item.is_dir():
-                normalized = re.sub(r"^\d+\s*[-_–—]\s*", "", item.name).casefold()
-                archive_folders[normalized] = f"{archive_root.name}/{item.name}"
-
-    candidates: dict[str, dict[str, Any]] = {}
-    moves = state.get("archive_moves", {})
-    for project in sorted(inactive, key=str.casefold):
-        if project.casefold() in selected:
-            continue
-        destination = moves.get(project, {}).get("archive_folder")
-        if not destination:
-            normalized = re.sub(r"^\d+\s*[-_–—]\s*", "", project).casefold()
-            destination = archive_folders.get(normalized)
-        if destination:
-            destination_path = vault / destination
-            manuscript = next(
-                (item.name for item in destination_path.iterdir() if item.is_dir() and item.name.casefold() == "manuscrit"),
-                None,
-            ) if destination_path.is_dir() else None
-            folder = f"{destination}/{manuscript}" if manuscript else destination
-            candidates[project] = {"title": project, "folder": folder}
-    return candidates
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Analyse l'activité d'écriture d'un vault Git")
     parser.add_argument("mode", nargs="?", choices=("full", "incremental"), default="incremental", help="full rejoue tout ; incremental traite uniquement les nouveaux commits")
     parser.add_argument("--config", default=None, help="Chemin de config.yaml")
     parser.add_argument("--full-rebuild", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--dry-run", action="store_true", help="Analyser sans écrire les fichiers JSON")
+    parser.add_argument("--dry-run", action="store_true", help="Analyser sans modifier la base SQLite")
     args = parser.parse_args()
     project_root = Path(__file__).resolve().parents[1]
     config_path = Path(args.config).resolve() if args.config else project_root / "config.yaml"
@@ -1329,10 +1087,7 @@ def main() -> int:
             if config.get("history_repo")
             else vault
         )
-        output = (base_dir / config["output_dir"]).resolve()
-        archived_projects_path = (base_dir / config["archived_projects_file"]).resolve()
         fingerprint_db = (base_dir / config["fingerprint_db"]).resolve()
-        data_dir = output / "data"
         if not history_repo.exists() and config.get("history_repo"):
             raise ValueError(
                 f"Le miroir historique {history_repo} n'existe pas. "
@@ -1341,8 +1096,13 @@ def main() -> int:
         ensure_repository(history_repo)
         fingerprint = config_fingerprint(config, metadata)
         full_rebuild = args.mode == "full" or args.full_rebuild
+        temporary_database = None
+        processing_database = fingerprint_db
+        if args.dry_run and full_rebuild:
+            temporary_database = tempfile.TemporaryDirectory(prefix="writinglog-dry-run-")
+            processing_database = Path(temporary_database.name) / "fingerprints.sqlite3"
         state = load_state(
-            data_dir / "state.json",
+            fingerprint_db,
             fingerprint,
             full_rebuild,
             config,
@@ -1352,23 +1112,26 @@ def main() -> int:
             state,
             config,
             metadata,
-            fingerprint_db,
-            persist_index=full_rebuild or not args.dry_run,
+            processing_database,
+            persist_index=not args.dry_run,
         )
-        exports = aggregate(state, config, metadata)
+        # Le générateur web dispose ainsi des titres et réglages associés à
+        # l'état analysé sans relire ni interpréter le vault.
+        state["project_metadata"] = metadata
         if not args.dry_run:
-            for name, payload in exports.items():
-                write_json(data_dir / f"{name}.json", payload)
-            write_json(data_dir / "state.json", state)
-            write_yaml(archived_projects_path, archived_project_candidates(vault, state, metadata))
-    except (GitError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            with FingerprintIndex(fingerprint_db) as database:
+                database.save_analysis(state)
+                database.commit()
+        if temporary_database:
+            temporary_database.cleanup()
+    except (GitError, OSError, RuntimeError, ValueError, json.JSONDecodeError, YAMLError) as exc:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1
     suffix = " (simulation, aucun fichier écrit)" if args.dry_run else ""
-    print(f"Analyse {args.mode} terminée{suffix} : {processed} nouveau(x) commit(s), {relevant} pertinent(s), {len(exports['projects'])} projet(s).")
+    project_count = len({event["project"] for event in state["events"]})
+    print(f"Analyse {args.mode} terminée{suffix} : {processed} nouveau(x) commit(s), {relevant} pertinent(s), {project_count} projet(s).")
     if not args.dry_run:
-        print(f"Données écrites dans {data_dir}")
-        print(f"Projets archivés proposés dans {archived_projects_path}")
+        print(f"Analyse enregistrée dans {fingerprint_db}")
     return 0
 
 
