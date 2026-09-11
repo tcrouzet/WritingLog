@@ -134,6 +134,11 @@ def path_key(path: str) -> str:
     return hashlib.sha256(path.encode("utf-8", errors="surrogateescape")).hexdigest()
 
 
+def content_hash(text: str) -> str:
+    """Identité exacte du contenu intégral d'un fichier."""
+    return hashlib.sha256(text.encode("utf-8", errors="surrogateescape")).hexdigest()
+
+
 DIFF_TOKEN_RE = re.compile(r"\s+|\w+(?:['’]\w+)*|[^\w\s]", re.UNICODE)
 
 
@@ -707,6 +712,11 @@ def process_history_diff(
                     )
                     active_creation = old_lifecycle.pop("active_creation", None)
                     if active_creation:
+                        active_creation.setdefault("size_history", []).append({
+                            "timestamp": commit.timestamp,
+                            "size": len(new_text),
+                        })
+                        active_creation["size"] = len(new_text)
                         lifecycle["active_creation"] = active_creation
                 reappeared_file = bool(
                     change.status == "A"
@@ -718,26 +728,60 @@ def process_history_diff(
                 elif change.status == "D":
                     lifecycle["deletions"] += 1
                     active_creation = lifecycle.pop("active_creation", None)
+                    deleted_content_hash = content_hash(old_text)
+                    if not active_creation:
+                        # Git peut présenter un déplacement comme une paire A/D
+                        # sans renommage. Le hash intégral rattache alors la
+                        # suppression au fichier rempli apparu sous un autre nom.
+                        for candidate_lifecycle in file_lifecycles.values():
+                            candidate = candidate_lifecycle.get("active_creation")
+                            if (
+                                candidate
+                                and candidate.get("project") == old_project
+                                and candidate.get("content_hash") == deleted_content_hash
+                            ):
+                                active_creation = candidate_lifecycle.pop("active_creation")
+                                break
                     if active_creation:
                         lifetime = minutes_between(
                             commit.timestamp,
                             active_creation["timestamp"],
                             float("inf"),
                         )
-                        if float(active_creation.get("overlap_ratio", 0.0)) >= 0.5:
+                        exact_transient = (
+                            active_creation.get("content_hash") == deleted_content_hash
+                        )
+                        if exact_transient or float(active_creation.get("overlap_ratio", 0.0)) >= 0.5:
                             original_event = events[int(active_creation["event_index"])]
                             reclassified = min(
                                 int(active_creation["real_chars"]),
                                 int(original_event["real_chars"]),
                             )
                             original_event["real_chars"] -= reclassified
-                            original_event["internal_chars"] += reclassified
+                            if exact_transient:
+                                removed_internal = min(
+                                    int(active_creation.get("internal_chars", 0)),
+                                    int(original_event["internal_chars"]),
+                                )
+                                original_event["internal_chars"] -= removed_internal
+                                creation_file_key = active_creation.get("file_key")
+                                original_event["duplication_sources"] = [
+                                    source
+                                    for source in original_event.get("duplication_sources", [])
+                                    if not source.get("target_file")
+                                    or path_key(source["target_file"]) != creation_file_key
+                                ]
+                            else:
+                                removed_internal = 0
+                                original_event["internal_chars"] += reclassified
                             original_event.setdefault("temporary_compilations", []).append({
                                 "file": old_path,
                                 "removed_commit": commit.sha,
                                 "lifetime_minutes": round(lifetime, 3),
                                 "overlap_ratio": active_creation["overlap_ratio"],
                                 "reclassified_chars": reclassified,
+                                "removed_internal_chars": removed_internal,
+                                "exact_content_hash": exact_transient,
                             })
                             if not active_creation.get("excluded_from_size"):
                                 size_history = active_creation.get("size_history", [])
@@ -747,7 +791,11 @@ def process_history_diff(
                                         or point["timestamp"] < active_creation["timestamp"]
                                     ):
                                         continue
-                                    effective_size = int(active_creation["size"])
+                                    effective_size = int(
+                                        size_history[0]["size"]
+                                        if size_history
+                                        else active_creation["size"]
+                                    )
                                     for historical_size in size_history:
                                         if historical_size["timestamp"] <= point["timestamp"]:
                                             effective_size = int(historical_size["size"])
@@ -952,10 +1000,16 @@ def process_history_diff(
                     "timestamp": commit.timestamp,
                     "event_index": event_indexes[record["new_project"]],
                     "real_chars": int(record["novel_chars"]),
+                    "internal_chars": int(record["internal_chars"]),
                     "overlap_ratio": round(overlap_ratio, 6),
                     "project": record["new_project"],
+                    "file_key": path_key(record["new_path"]),
+                    "content_hash": content_hash(whole_added[0] if whole_added else ""),
                     "size": len(whole_added[0]) if whole_added else 0,
-                    "size_history": [],
+                    "size_history": [{
+                        "timestamp": commit.timestamp,
+                        "size": len(whole_added[0]) if whole_added else 0,
+                    }],
                     "excluded_from_size": bool(record["exclude_from_size"]),
                 }
 

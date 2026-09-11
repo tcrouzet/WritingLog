@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 
@@ -20,13 +21,24 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     source = root / "web"
     destination = root / "site"
+    build_version = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     for relative in FILES:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".tmp")
-        shutil.copyfile(source / relative, temporary)
+        if relative == Path("index.html"):
+            html = (source / relative).read_text(encoding="utf-8")
+            temporary.write_text(
+                html.replace("__BUILD_VERSION__", build_version),
+                encoding="utf-8",
+            )
+        else:
+            shutil.copyfile(source / relative, temporary)
         temporary.replace(target)
-    print(f"Site web généré dans {destination} (données JSON conservées).")
+    print(
+        f"Site web généré dans {destination} "
+        f"(version {build_version}, données JSON conservées)."
+    )
 
 
 if __name__ == "__main__":

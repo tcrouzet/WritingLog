@@ -147,7 +147,7 @@ Le ratio est le nombre de fingerprints du bloc déjà connus divisé par le nomb
 
 Un fichier nouvellement créé est d’abord testé comme un bloc unique. Si son recouvrement global atteint le seuil, il est traité intégralement comme une compilation et aucun de ses passages légèrement modifiés ou de ses séparateurs n’est recrédité en production. Si le fichier complet n’atteint pas le seuil, l’analyse descend au niveau des groupes de phrases afin de conserver les passages réellement nouveaux et d’écarter seulement les copies.
 
-Le cycle de vie du chemin est également mémorisé. Lorsqu’un fichier déjà créé puis supprimé réapparaît et que plus de la moitié de ses fingerprints existaient auparavant, il est classé intégralement comme compilation récurrente. Cette règle couvre notamment les exports temporaires d’un manuscrit assemblé, même si de nombreuses corrections font tomber son recouvrement sous le seuil normal de 0,85. Une simple suppression, un fichier nouveau persistant ou une réapparition sans majorité de texte connu ne déclenchent pas cette règle.
+Le cycle de vie du chemin est également mémorisé, ainsi qu’un SHA-256 du contenu intégral lors de la création. Si un fichier apparaît rempli puis si le même contenu exact disparaît — sous le même chemin ou après un renommage — cette apparition est un artefact transitoire : elle est retirée rétroactivement de la production, des duplications publiées et de toute la courbe de taille, sans aucun seuil. Ses fingerprints restent uniquement dans SQLite afin de reconnaître une réapparition future. Lorsqu’un fichier réapparaît fortement modifié, la majorité de fingerprints antérieurs reste le signal secondaire permettant de reconnaître une compilation récurrente.
 
 Les compilations dont le nom change à chaque export sont traitées rétroactivement. Leur cycle de vie suit aussi les renommages intermédiaires : une création sous un premier nom puis une suppression sous un second restent le même fichier temporaire. Si un fichier créé avec une majorité de fingerprints déjà connus disparaît ensuite, les signes encore attribués comme nouveaux à sa création sont transférés vers les duplications internes. L’événement d’origine conserve le chemin, le commit de suppression, la durée de vie, le recouvrement et le nombre de signes reclassés dans `temporary_compilations` pour audit. Sa taille est également retirée rétroactivement de toute la courbe pendant sa période d’existence.
 
@@ -233,7 +233,7 @@ La génération des JSON et celle du site web sont deux commandes indépendantes
 ./web.sh
 ```
 
-`./analyse.sh` met à jour uniquement `site/data/*.json`. `./web.sh` copie les sources de `web/` vers `site/`, sans modifier les JSON et sans démarrer de serveur.
+`./analyse.sh` met à jour uniquement `site/data/*.json`. `./web.sh` copie les sources de `web/` vers `site/`, sans modifier les JSON et sans démarrer de serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
 
 Le filtre principal permet d’isoler un projet. Le graphique « Production » regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi.
 

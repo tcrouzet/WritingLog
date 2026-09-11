@@ -399,8 +399,14 @@ output_dir: site
 
         self.analyze("full")
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
-        self.assertEqual(project["signes_reels_total"], len("texte durable") + len(temporary_text))
+        self.assertEqual(project["signes_reels_total"], len("texte durable"))
         self.assertEqual(project["signes_supprimes_total"], 0)
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len("texte durable")] * 2)
         database = sqlite3.connect(self.root / ".cache" / "fingerprints.sqlite3")
         try:
             count = database.execute(
@@ -734,7 +740,9 @@ output_dir: site
         self.commit("temporary compilation", "2026-01-02T10:15:00+01:00")
         second_name = manuscript / "fusion-0831.md"
         first_name.rename(second_name)
-        self.commit("rename temporary compilation", "2026-01-03T10:15:00+01:00")
+        renamed_text = compiled_text[:-1000]
+        second_name.write_text(renamed_text, encoding="utf-8")
+        self.commit("rename and edit temporary compilation", "2026-01-03T10:15:00+01:00")
         second_name.unlink()
         self.commit("delete renamed compilation", "2026-01-04T10:30:00+01:00")
 
@@ -750,6 +758,33 @@ output_dir: site
             sizes,
             [len(source_text), len(source_text), len(source_text), len(source_text)],
         )
+
+    def test_exact_unique_file_renamed_then_deleted_is_removed_from_history(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        durable = self.text(500, seed=203)
+        (manuscript / "chapter.md").write_text(durable, encoding="utf-8")
+        self.commit("durable source", "2026-01-01T10:00:00+01:00")
+
+        transient = self.text(2000, seed=204)
+        first_name = manuscript / "export-1.md"
+        first_name.write_text(transient, encoding="utf-8")
+        self.commit("filled export appears", "2026-01-02T10:00:00+01:00")
+        second_name = manuscript / "export-2.md"
+        first_name.rename(second_name)
+        self.commit("export renamed", "2026-01-03T10:00:00+01:00")
+        second_name.unlink()
+        self.commit("same export disappears", "2026-01-04T10:00:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len(durable))
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len(durable)] * 4)
 
     def test_edited_add_delete_pair_is_treated_as_a_rename(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"

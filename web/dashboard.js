@@ -417,8 +417,11 @@
 
   async function start() {
     try {
+      // Une URL différente à chaque chargement empêche le navigateur comme un
+      // éventuel hébergeur statique de resservir les anciens JSON.
+      const dataVersion = Date.now().toString(36);
       const values = await Promise.all(files.map(async name => {
-        const response = await fetch(`data/${name}.json`, { cache: "no-store" });
+        const response = await fetch(`data/${name}.json?v=${dataVersion}`, { cache: "no-store" });
         if (!response.ok) throw new Error(`${name}.json : HTTP ${response.status}`);
         return response.json();
       }));
