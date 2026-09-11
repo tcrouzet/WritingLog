@@ -6,16 +6,19 @@
   folder: "Archives/Épicènes"
 24-Archives:
   title: "24-Archives"
-  folder: "Archives/26-100 raisons de ne pas voter"
+  folder: "Archives/1minute/Manuscrit"
 Blog:
   title: "Blog"
   folder: "Archives/Blog"
 CodeH:
   title: "CodeH"
   folder: "Archives/CodeH/Manuscrit"
+RR:
+  title: "RR"
+  folder: "Archives/Rush/manuscrit"
 Tract:
   title: "Tract"
-  folder: "Archives/Tract"
+  folder: "Archives/LeLivreContreAttaque/Manuscrit"
 "Épicènes":
   title: "Épicènes"
   folder: "Archives/Épicènes"

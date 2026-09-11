@@ -432,6 +432,24 @@ def configured_project_paths(
     return paths
 
 
+def configured_size_paths(metadata: dict[str, Any]) -> dict[str, list[tuple[str, ...]]]:
+    """Chemins du manuscrit, sans les anciennes versions rangées en archive."""
+    all_paths = configured_project_paths(metadata, include_history=True)
+    current_paths = configured_project_paths(metadata, include_history=False)
+    size_paths: dict[str, list[tuple[str, ...]]] = {}
+    for project, locations in all_paths.items():
+        current = current_paths[project][0]
+        current_is_archived = "archives" in current
+        size_paths[project] = [
+            location
+            for location in locations
+            if location == current
+            or current_is_archived
+            or "archives" not in location
+        ]
+    return size_paths
+
+
 def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
     relevant = {
         "excluded_folders": config["excluded_folders"],
@@ -566,6 +584,7 @@ def process_history_diff(
     }
     excluded = {str(folder).strip("/").casefold() for folder in config["excluded_folders"]}
     history_paths = configured_project_paths(metadata, include_history=True)
+    size_paths = configured_size_paths(metadata)
     gram_chars = int(config["internal_detection"]["gram_chars"])
     selection_chars = int(config["internal_detection"]["selection_chars"])
     overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
@@ -626,6 +645,7 @@ def process_history_diff(
             touched_sizes: set[str] = set()
             change_records: list[dict[str, Any]] = []
             commit_added_hashes: list[str] = []
+            pending_compilation_deletions: list[dict[str, Any]] = []
 
             commit_changes = infer_edited_renames(
                 commit.sha,
@@ -635,6 +655,12 @@ def process_history_diff(
                 gram_chars,
                 selection_chars,
             )
+            # Première passe : charger chaque blob, calculer chaque diff et
+            # hasher chaque fragment une seule fois. Toutes les additions du
+            # commit sont ainsi connues avant que la première suppression soit
+            # jugée dans la passe de traitement.
+            prepared_changes: list[dict[str, Any]] = []
+            commit_local_hashes: set[str] = set()
             for change in commit_changes:
                 old_path = change.old_path or (change.new_path if change.status != "A" else None)
                 new_path = change.new_path
@@ -644,32 +670,6 @@ def process_history_diff(
                     continue
                 old_text = blobs.text(f"{commit.sha}^", old_path) or "" if old_md and old_path else ""
                 new_text = blobs.text(commit.sha, new_path) or "" if new_md and new_path else ""
-                old_project = project_for(old_path, extensions, excluded, history_paths)
-                new_project = project_for(new_path, extensions, excluded, history_paths)
-                old_folder = tracked_folder_for(old_path, old_project, history_paths)
-                new_folder = tracked_folder_for(new_path, new_project, history_paths)
-                if old_project and old_folder:
-                    work[old_project]["folders"].add(old_folder)
-                if new_project and new_folder:
-                    work[new_project]["folders"].add(new_folder)
-
-                if old_project and change.status != "C":
-                    project_sizes[old_project] = max(
-                        0,
-                        int(project_sizes.get(old_project, 0)) - len(old_text),
-                    )
-                    touched_sizes.add(old_project)
-                    if old_path:
-                        files.pop(path_key(old_path), None)
-                if new_project:
-                    project_sizes[new_project] = int(project_sizes.get(new_project, 0)) + len(new_text)
-                    files[path_key(new_path)] = {
-                        "size": len(new_text),
-                        "project": new_project,
-                        "last_timestamp": commit.timestamp,
-                    }
-                    touched_sizes.add(new_project)
-
                 if change.status == "A":
                     added_parts, removed_parts = ([new_text] if new_text else []), []
                 elif change.status == "D":
@@ -678,11 +678,109 @@ def process_history_diff(
                     added_parts, removed_parts = character_changes(old_text, new_text)
                 added_parts = classification_blocks(added_parts)
                 removed_parts = classification_blocks(removed_parts)
+                added_blocks = [
+                    (part, winnowed_hashes(part, gram_chars, selection_chars))
+                    for part in added_parts
+                ]
+                removed_blocks = [
+                    (part, winnowed_hashes(part, gram_chars, selection_chars))
+                    for part in removed_parts
+                ]
                 whole_added_block = (
                     (new_text, winnowed_hashes(new_text, gram_chars, selection_chars))
                     if change.status == "A" and new_text
                     else None
                 )
+                for _, block_hashes in added_blocks:
+                    commit_local_hashes.update(block_hashes)
+                    commit_added_hashes.extend(block_hashes)
+                if whole_added_block:
+                    commit_local_hashes.update(whole_added_block[1])
+                    commit_added_hashes.extend(whole_added_block[1])
+                prepared_changes.append({
+                    "change": change,
+                    "old_path": old_path,
+                    "new_path": new_path,
+                    "old_md": old_md,
+                    "new_md": new_md,
+                    "old_text": old_text,
+                    "new_text": new_text,
+                    "added_blocks": added_blocks,
+                    "removed_blocks": removed_blocks,
+                    "whole_added_block": whole_added_block,
+                })
+
+            # Seconde passe : toute la logique métier réutilise exclusivement
+            # les textes, diffs et hashes préparés ci-dessus.
+            for prepared in prepared_changes:
+                change = prepared["change"]
+                old_path = prepared["old_path"]
+                new_path = prepared["new_path"]
+                old_md = prepared["old_md"]
+                new_md = prepared["new_md"]
+                old_text = prepared["old_text"]
+                new_text = prepared["new_text"]
+                added_blocks = prepared["added_blocks"]
+                removed_blocks = prepared["removed_blocks"]
+                whole_added_block = prepared["whole_added_block"]
+                old_project = project_for(old_path, extensions, excluded, history_paths)
+                # Le registre courant des fichiers conserve l'identité du
+                # projet après un déplacement vers un chemin historique qui
+                # n'était pas encore connu de projet.yml.
+                if not old_project and old_path:
+                    old_project = files.get(path_key(old_path), {}).get("project")
+                new_project = project_for(new_path, extensions, excluded, history_paths)
+                if not new_project and old_project and change.status in {"M", "R"}:
+                    new_project = old_project
+                old_file = files.get(path_key(old_path), {}) if old_path else {}
+                old_size_project = project_for(
+                    old_path, extensions, excluded, size_paths
+                )
+                if not old_size_project and old_file.get("counts_toward_size"):
+                    old_size_project = old_file.get("project")
+                new_size_project = project_for(
+                    new_path, extensions, excluded, size_paths
+                )
+                if (
+                    not new_size_project
+                    and old_size_project
+                    and change.status in {"M", "R"}
+                    and new_path
+                    and "archives" not in {
+                        part.casefold() for part in PurePosixPath(new_path).parts
+                    }
+                ):
+                    new_size_project = old_size_project
+                old_folder = tracked_folder_for(old_path, old_project, history_paths)
+                new_folder = tracked_folder_for(new_path, new_project, history_paths)
+                if old_project and old_folder:
+                    work[old_project]["folders"].add(old_folder)
+                if new_project and new_folder:
+                    work[new_project]["folders"].add(new_folder)
+
+                if old_size_project and change.status != "C":
+                    project_sizes[old_size_project] = max(
+                        0,
+                        int(project_sizes.get(old_size_project, 0)) - len(old_text),
+                    )
+                    touched_sizes.add(old_size_project)
+                    if old_path:
+                        files.pop(path_key(old_path), None)
+                elif old_project and change.status != "C" and old_path:
+                    files.pop(path_key(old_path), None)
+                if new_size_project:
+                    project_sizes[new_size_project] = (
+                        int(project_sizes.get(new_size_project, 0)) + len(new_text)
+                    )
+                    touched_sizes.add(new_size_project)
+                if new_project:
+                    files[path_key(new_path)] = {
+                        "size": len(new_text),
+                        "project": new_project,
+                        "counts_toward_size": bool(new_size_project),
+                        "last_timestamp": commit.timestamp,
+                    }
+
                 lifecycle_key = path_key(new_path or old_path) if (new_path or old_path) else None
                 lifecycle = file_lifecycles.setdefault(
                     lifecycle_key, {"additions": 0, "deletions": 0}
@@ -736,120 +834,16 @@ def process_history_diff(
                                 active_creation = candidate_lifecycle.pop("active_creation")
                                 break
                     if active_creation:
-                        # Le ratio figé à la création ne décrit plus un fichier
-                        # retouché. On interroge donc l'index sur son contenu au
-                        # moment de la suppression, en excluant toutes les
-                        # provenances appartenant à son propre cycle de vie.
-                        deletion_hashes = winnowed_hashes(
-                            old_text, gram_chars, selection_chars
-                        )
-                        known_at_deletion, _ = fingerprints.original_sources(
-                            deletion_hashes
-                        )
-                        files_at_deletion = fingerprints.fingerprint_files(
-                            deletion_hashes
-                        )
-                        lifecycle_file_keys = {
-                            value
-                            for value in active_creation.get(
-                                "file_keys", [active_creation.get("file_key")]
-                            )
-                            if value
-                        }
-                        externally_known = {
-                            value
-                            for value in known_at_deletion
-                            if any(
-                                path_key(source_file) not in lifecycle_file_keys
-                                for source_file in files_at_deletion.get(value, set())
-                            )
-                        }
-                        deletion_ratio = (
-                            sum(
-                                1
-                                for value in deletion_hashes
-                                if value in externally_known
-                            )
-                            / len(deletion_hashes)
-                            if deletion_hashes
-                            else 0.0
-                        )
-                        lifetime = minutes_between(
-                            commit.timestamp,
-                            active_creation["timestamp"],
-                            float("inf"),
-                        )
-                        exact_transient = (
-                            active_creation.get("content_hash") == deleted_content_hash
-                        )
-                        if (
-                            exact_transient
-                            or deletion_ratio >= 0.5
-                            or float(active_creation.get("overlap_ratio", 0.0)) >= 0.5
-                        ):
-                            original_event = events[int(active_creation["event_index"])]
-                            contributions = active_creation.get("contributions") or [{
-                                "event_index": active_creation["event_index"],
-                                "real_chars": active_creation.get("real_chars", 0),
-                                "internal_chars": active_creation.get("internal_chars", 0),
-                            }]
-                            reclassified = 0
-                            removed_internal = 0
-                            for contribution in contributions:
-                                contribution_event = events[int(contribution["event_index"])]
-                                moved_real = min(
-                                    int(contribution.get("real_chars", 0)),
-                                    int(contribution_event["real_chars"]),
-                                )
-                                contribution_event["real_chars"] -= moved_real
-                                reclassified += moved_real
-                                if exact_transient:
-                                    moved_internal = min(
-                                        int(contribution.get("internal_chars", 0)),
-                                        int(contribution_event["internal_chars"]),
-                                    )
-                                    contribution_event["internal_chars"] -= moved_internal
-                                    removed_internal += moved_internal
-                                    contribution_event["duplication_sources"] = [
-                                        source
-                                        for source in contribution_event.get(
-                                            "duplication_sources", []
-                                        )
-                                        if not source.get("target_file")
-                                        or path_key(source["target_file"])
-                                        not in lifecycle_file_keys
-                                    ]
-                                else:
-                                    contribution_event["internal_chars"] += moved_real
-                            original_event.setdefault("temporary_compilations", []).append({
-                                "file": old_path,
-                                "removed_commit": commit.sha,
-                                "lifetime_minutes": round(lifetime, 3),
-                                "overlap_ratio": max(
-                                    deletion_ratio,
-                                    float(active_creation.get("overlap_ratio", 0.0)),
-                                ),
-                                "reclassified_chars": reclassified,
-                                "removed_internal_chars": removed_internal,
-                                "exact_content_hash": exact_transient,
-                            })
-                            if not active_creation.get("excluded_from_size"):
-                                size_history = active_creation.get("size_history", [])
-                                for point in size_points:
-                                    if (
-                                        point["project"] != active_creation["project"]
-                                        or point["timestamp"] < active_creation["timestamp"]
-                                    ):
-                                        continue
-                                    effective_size = int(
-                                        size_history[0]["size"]
-                                        if size_history
-                                        else active_creation["size"]
-                                    )
-                                    for historical_size in size_history:
-                                        if historical_size["timestamp"] <= point["timestamp"]:
-                                            effective_size = int(historical_size["size"])
-                                    point["size"] = max(0, int(point["size"]) - effective_size)
+                        # Le verdict est différé jusqu'à ce que les empreintes de
+                        # tous les ajouts du commit soient disponibles. Une
+                        # fusion peut être supprimée dans le même commit que la
+                        # création des chapitres qui la remplacent.
+                        pending_compilation_deletions.append({
+                            "active_creation": active_creation,
+                            "old_text": old_text,
+                            "old_path": old_path,
+                            "deleted_content_hash": deleted_content_hash,
+                        })
 
                 elif change.status == "M" and lifecycle.get("active_creation"):
                     active_creation = lifecycle["active_creation"]
@@ -858,19 +852,6 @@ def process_history_diff(
                         "size": len(new_text),
                     })
                     active_creation["size"] = len(new_text)
-                added_blocks = [
-                    (part, winnowed_hashes(part, gram_chars, selection_chars))
-                    for part in added_parts
-                ]
-                removed_blocks = [
-                    (part, winnowed_hashes(part, gram_chars, selection_chars))
-                    for part in removed_parts
-                ]
-                commit_added_hashes.extend(
-                    value for _, block_hashes in added_blocks for value in block_hashes
-                )
-                if whole_added_block:
-                    commit_added_hashes.extend(whole_added_block[1])
                 change_records.append({
                     "status": change.status,
                     "old_path": old_path if old_md else None,
@@ -894,6 +875,115 @@ def process_history_diff(
                             "archive_folder": "/".join(parts[:2]),
                             "moved_at": commit.timestamp,
                         }
+
+            for pending_deletion in pending_compilation_deletions:
+                active_creation = pending_deletion["active_creation"]
+                old_text = pending_deletion["old_text"]
+                old_path = pending_deletion["old_path"]
+                deleted_content_hash = pending_deletion["deleted_content_hash"]
+                deletion_hashes = winnowed_hashes(old_text, gram_chars, selection_chars)
+                known_at_deletion, _ = fingerprints.original_sources(deletion_hashes)
+                files_at_deletion = fingerprints.fingerprint_files(deletion_hashes)
+                lifecycle_file_keys = {
+                    value
+                    for value in active_creation.get(
+                        "file_keys", [active_creation.get("file_key")]
+                    )
+                    if value
+                }
+                externally_known = {
+                    value
+                    for value in known_at_deletion
+                    if any(
+                        path_key(source_file) not in lifecycle_file_keys
+                        for source_file in files_at_deletion.get(value, set())
+                    )
+                }
+                deletion_ratio = (
+                    sum(
+                        1
+                        for value in deletion_hashes
+                        if value in externally_known or value in commit_local_hashes
+                    )
+                    / len(deletion_hashes)
+                    if deletion_hashes
+                    else 0.0
+                )
+                lifetime = minutes_between(
+                    commit.timestamp,
+                    active_creation["timestamp"],
+                    float("inf"),
+                )
+                exact_transient = (
+                    active_creation.get("content_hash") == deleted_content_hash
+                )
+                if not (
+                    exact_transient
+                    or deletion_ratio >= 0.5
+                    or float(active_creation.get("overlap_ratio", 0.0)) >= 0.5
+                ):
+                    continue
+
+                original_event = events[int(active_creation["event_index"])]
+                contributions = active_creation.get("contributions") or [{
+                    "event_index": active_creation["event_index"],
+                    "real_chars": active_creation.get("real_chars", 0),
+                    "internal_chars": active_creation.get("internal_chars", 0),
+                }]
+                reclassified = 0
+                removed_internal = 0
+                for contribution in contributions:
+                    contribution_event = events[int(contribution["event_index"])]
+                    moved_real = min(
+                        int(contribution.get("real_chars", 0)),
+                        int(contribution_event["real_chars"]),
+                    )
+                    contribution_event["real_chars"] -= moved_real
+                    reclassified += moved_real
+                    if exact_transient:
+                        moved_internal = min(
+                            int(contribution.get("internal_chars", 0)),
+                            int(contribution_event["internal_chars"]),
+                        )
+                        contribution_event["internal_chars"] -= moved_internal
+                        removed_internal += moved_internal
+                        contribution_event["duplication_sources"] = [
+                            source
+                            for source in contribution_event.get("duplication_sources", [])
+                            if not source.get("target_file")
+                            or path_key(source["target_file"]) not in lifecycle_file_keys
+                        ]
+                    else:
+                        contribution_event["internal_chars"] += moved_real
+                original_event.setdefault("temporary_compilations", []).append({
+                    "file": old_path,
+                    "removed_commit": commit.sha,
+                    "lifetime_minutes": round(lifetime, 3),
+                    "overlap_ratio": max(
+                        deletion_ratio,
+                        float(active_creation.get("overlap_ratio", 0.0)),
+                    ),
+                    "reclassified_chars": reclassified,
+                    "removed_internal_chars": removed_internal,
+                    "exact_content_hash": exact_transient,
+                })
+                if not active_creation.get("excluded_from_size"):
+                    size_history = active_creation.get("size_history", [])
+                    for point in size_points:
+                        if (
+                            point["project"] != active_creation["project"]
+                            or point["timestamp"] < active_creation["timestamp"]
+                        ):
+                            continue
+                        effective_size = int(
+                            size_history[0]["size"]
+                            if size_history
+                            else active_creation["size"]
+                        )
+                        for historical_size in size_history:
+                            if historical_size["timestamp"] <= point["timestamp"]:
+                                effective_size = int(historical_size["size"])
+                        point["size"] = max(0, int(point["size"]) - effective_size)
 
             known_hashes, source_by_hash = fingerprints.original_sources(commit_added_hashes)
             run_added_hashes.update(commit_added_hashes)

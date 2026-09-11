@@ -11,7 +11,7 @@
   {
     "id": "BornToBike",
     "title": "BornToBike",
-    "signes_reels_total": 85394,
+    "signes_reels_total": 79626,
     "signes_supprimes_total": 6314,
     "taille_actuelle": 3149952,
     "date_creation": "2024-01-02T17:14:48+01:00",
@@ -57,9 +57,9 @@
       "Isa/archives/manuscritV1"
     ],
     "id": "Isa",
-    "signes_reels_total": 582272,
-    "signes_supprimes_total": 128704,
-    "taille_actuelle": 332499,
+    "signes_reels_total": 578321,
+    "signes_supprimes_total": 130072,
+    "taille_actuelle": 345182,
     "date_creation": "2025-08-02T10:38:31+02:00",
     "derniere_activite": "2026-09-11T08:00:51+02:00"
   },
@@ -94,8 +94,8 @@
     "title": "Rush",
     "folder": "Archives/Rush/manuscrit",
     "id": "Rush",
-    "signes_reels_total": 19724,
-    "signes_supprimes_total": 78702,
+    "signes_reels_total": 49793,
+    "signes_supprimes_total": 96609,
     "taille_actuelle": 0,
     "date_creation": "2024-12-07T11:23:06+01:00",
     "derniere_activite": "2025-12-13T11:05:56+01:00"
@@ -103,16 +103,16 @@
   {
     "id": "WIP",
     "title": "WIP",
-    "signes_reels_total": 3635128,
-    "signes_supprimes_total": 140626,
+    "signes_reels_total": 3629079,
+    "signes_supprimes_total": 141243,
     "taille_actuelle": 2253527,
     "date_creation": "2024-01-13T18:39:59+01:00",
-    "derniere_activite": "2026-03-06T21:30:04+01:00"
+    "derniere_activite": "2026-07-16T08:24:45+02:00"
   },
   {
     "id": "iT",
     "title": "iT",
-    "signes_reels_total": 473707,
+    "signes_reels_total": 469887,
     "signes_supprimes_total": 139352,
     "taille_actuelle": 679808,
     "date_creation": "2025-12-07T09:49:51+01:00",
@@ -121,7 +121,7 @@
   {
     "id": "tcrouzet",
     "title": "tcrouzet",
-    "signes_reels_total": 9103345,
+    "signes_reels_total": 8996780,
     "signes_supprimes_total": 1486440,
     "taille_actuelle": 15845373,
     "date_creation": "2024-04-18T18:48:49+02:00",

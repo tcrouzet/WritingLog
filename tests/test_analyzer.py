@@ -869,6 +869,111 @@ output_dir: site
         ]
         self.assertEqual(sizes, [len(source_text)] * 4)
 
+    def test_same_commit_split_is_visible_when_edited_compilation_is_deleted(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        durable = self.text(600, seed=207)
+        (manuscript / "durable.md").write_text(durable, encoding="utf-8")
+        self.commit("durable source", "2026-01-01T10:00:00+01:00")
+
+        # Les noms forcent l'entrée D avant les A dans l'ordre lexical habituel
+        # de Git ; le résultat ne doit toutefois dépendre d'aucun ordre.
+        compilation = manuscript / "000-fusion.md"
+        initial = self.text(12000, seed=208)
+        compilation.write_text(initial, encoding="utf-8")
+        self.commit("unique temporary fusion", "2026-01-02T10:00:00+01:00")
+
+        final = initial[:5900] + " correction éditoriale inédite " + initial[6000:]
+        compilation.write_text(final, encoding="utf-8")
+        self.commit("edit temporary fusion", "2026-01-03T10:00:00+01:00")
+
+        compilation.unlink()
+        quarter = len(final) // 4
+        for index in range(4):
+            start = index * quarter
+            end = (index + 1) * quarter if index < 3 else len(final)
+            (manuscript / f"zzz-chapter-{index}.md").write_text(
+                final[start:end], encoding="utf-8"
+            )
+        self.commit("split fusion into chapters", "2026-01-04T10:00:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len(durable))
+        state = self.load("state.json")
+        temporary = next(
+            event["temporary_compilations"][0]
+            for event in state["events"]
+            if event.get("temporary_compilations")
+        )
+        self.assertGreaterEqual(temporary["overlap_ratio"], 0.5)
+        self.assertFalse(temporary["exact_content_hash"])
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes[:3], [len(durable)] * 3)
+        self.assertEqual(sizes[-1], len(durable) + len(final))
+
+    def test_project_identity_survives_archive_but_size_excludes_it(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        original = self.text(4000, seed=209)
+        source = manuscript / "chapter.md"
+        source.write_text(original, encoding="utf-8")
+        self.commit("tracked chapter", "2026-01-01T10:00:00+01:00")
+
+        archived = self.vault / "Alpha" / "archives" / "manuscrit-v1" / "chapter.md"
+        archived.parent.mkdir(parents=True)
+        source.rename(archived)
+        self.commit("archive tracked chapter", "2026-01-02T10:00:00+01:00")
+
+        revised = original + " correction conservée dans le projet"
+        archived.write_text(revised, encoding="utf-8")
+        self.commit("edit archived chapter", "2026-01-03T10:00:00+01:00")
+
+        self.analyze("full")
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len(original), 0])
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["taille_actuelle"], 0)
+        last_event = next(
+            event
+            for event in reversed(self.load("state.json")["events"])
+            if event["project"] == "Alpha"
+        )
+        self.assertGreater(last_event["real_chars"] + last_event["internal_chars"], 0)
+
+    def test_archived_version_does_not_double_active_manuscript_size(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        old_version = self.text(5000, seed=210)
+        old_path = manuscript / "old.md"
+        old_path.write_text(old_version, encoding="utf-8")
+        self.commit("old active manuscript", "2026-01-01T10:00:00+01:00")
+
+        archive_path = self.vault / "Alpha" / "archives" / "v1" / "old.md"
+        archive_path.parent.mkdir(parents=True)
+        old_path.rename(archive_path)
+        current = self.text(3200, seed=211)
+        (manuscript / "current.md").write_text(current, encoding="utf-8")
+        self.commit("archive v1 and create current manuscript", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len(old_version), len(current)])
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["taille_actuelle"], len(current))
+
     def test_exact_unique_file_renamed_then_deleted_is_removed_from_history(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)

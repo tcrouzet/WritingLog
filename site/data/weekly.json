@@ -173,7 +173,7 @@
   {
     "periode": "2024-W07",
     "projet": "BornToBike",
-    "signes_reels": 4150,
+    "signes_reels": 4061,
     "signes_supprimes": 659,
     "dossiers": [
       "BornToBike"
@@ -191,7 +191,7 @@
   {
     "periode": "2024-W08",
     "projet": "BornToBike",
-    "signes_reels": 526,
+    "signes_reels": 437,
     "signes_supprimes": 4,
     "dossiers": [
       "BornToBike"
@@ -317,7 +317,7 @@
   {
     "periode": "2024-W16",
     "projet": "tcrouzet",
-    "signes_reels": 6569292,
+    "signes_reels": 6534075,
     "signes_supprimes": 1006042,
     "dossiers": [
       "tcrouzet"
@@ -335,7 +335,7 @@
   {
     "periode": "2024-W17",
     "projet": "tcrouzet",
-    "signes_reels": 95077,
+    "signes_reels": 94266,
     "signes_supprimes": 31183,
     "dossiers": [
       "tcrouzet"
@@ -429,15 +429,6 @@
     "signes_supprimes": 1686,
     "dossiers": [
       "WIP"
-    ]
-  },
-  {
-    "periode": "2024-W23",
-    "projet": "BornToBike",
-    "signes_reels": 5525,
-    "signes_supprimes": 0,
-    "dossiers": [
-      "BornToBike"
     ]
   },
   {
@@ -857,7 +848,7 @@
   {
     "periode": "2024-W50",
     "projet": "BornToBike",
-    "signes_reels": 431,
+    "signes_reels": 366,
     "signes_supprimes": 27,
     "dossiers": [
       "BornToBike"
@@ -884,7 +875,7 @@
   {
     "periode": "2024-W50",
     "projet": "Rush",
-    "signes_reels": 221,
+    "signes_reels": 0,
     "signes_supprimes": 29935,
     "dossiers": [
       "Rush/Manuscrit"
@@ -946,15 +937,6 @@
   },
   {
     "periode": "2024-W52",
-    "projet": "Rush",
-    "signes_reels": 122,
-    "signes_supprimes": 0,
-    "dossiers": [
-      "Rush/Manuscrit"
-    ]
-  },
-  {
-    "periode": "2024-W52",
     "projet": "tcrouzet",
     "signes_reels": 23779,
     "signes_supprimes": 2947,
@@ -1010,7 +992,7 @@
   {
     "periode": "2025-W02",
     "projet": "Rush",
-    "signes_reels": 16,
+    "signes_reels": 0,
     "signes_supprimes": 21031,
     "dossiers": [
       "Rush/Manuscrit"
@@ -1073,7 +1055,7 @@
   {
     "periode": "2025-W05",
     "projet": "tcrouzet",
-    "signes_reels": 45323,
+    "signes_reels": 39574,
     "signes_supprimes": 9911,
     "dossiers": [
       "tcrouzet"
@@ -1153,11 +1135,29 @@
   },
   {
     "periode": "2025-W08",
+    "projet": "Rush",
+    "signes_reels": 215,
+    "signes_supprimes": 355,
+    "dossiers": [
+      "Rush"
+    ]
+  },
+  {
+    "periode": "2025-W08",
     "projet": "tcrouzet",
     "signes_reels": 22170,
     "signes_supprimes": 6015,
     "dossiers": [
       "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2025-W09",
+    "projet": "Rush",
+    "signes_reels": 7436,
+    "signes_supprimes": 2019,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1176,6 +1176,15 @@
     "signes_supprimes": 0,
     "dossiers": [
       "Divers"
+    ]
+  },
+  {
+    "periode": "2025-W10",
+    "projet": "Rush",
+    "signes_reels": 8508,
+    "signes_supprimes": 4816,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1207,6 +1216,15 @@
   },
   {
     "periode": "2025-W11",
+    "projet": "Rush",
+    "signes_reels": 6,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Rush"
+    ]
+  },
+  {
+    "periode": "2025-W11",
     "projet": "tcrouzet",
     "signes_reels": 40830,
     "signes_supprimes": 6349,
@@ -1217,7 +1235,7 @@
   {
     "periode": "2025-W12",
     "projet": "WIP",
-    "signes_reels": 3486,
+    "signes_reels": 1219,
     "signes_supprimes": 2,
     "dossiers": [
       "WIP"
@@ -1239,6 +1257,15 @@
     "signes_supprimes": 0,
     "dossiers": [
       "BornToBike"
+    ]
+  },
+  {
+    "periode": "2025-W13",
+    "projet": "Rush",
+    "signes_reels": 1610,
+    "signes_supprimes": 485,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1271,10 +1298,19 @@
   {
     "periode": "2025-W14",
     "projet": "tcrouzet",
-    "signes_reels": 18922,
+    "signes_reels": 12904,
     "signes_supprimes": 3383,
     "dossiers": [
       "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2025-W15",
+    "projet": "Rush",
+    "signes_reels": 0,
+    "signes_supprimes": 24,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1302,6 +1338,15 @@
     "signes_supprimes": 0,
     "dossiers": [
       "Divers"
+    ]
+  },
+  {
+    "periode": "2025-W16",
+    "projet": "Rush",
+    "signes_reels": 27,
+    "signes_supprimes": 33,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1343,7 +1388,7 @@
   {
     "periode": "2025-W17",
     "projet": "tcrouzet",
-    "signes_reels": 32875,
+    "signes_reels": 26117,
     "signes_supprimes": 222,
     "dossiers": [
       "tcrouzet"
@@ -1397,7 +1442,7 @@
   {
     "periode": "2025-W20",
     "projet": "WIP",
-    "signes_reels": 50472,
+    "signes_reels": 49058,
     "signes_supprimes": 4311,
     "dossiers": [
       "WIP"
@@ -1486,11 +1531,29 @@
   },
   {
     "periode": "2025-W25",
+    "projet": "Rush",
+    "signes_reels": 3230,
+    "signes_supprimes": 2592,
+    "dossiers": [
+      "Rush"
+    ]
+  },
+  {
+    "periode": "2025-W25",
     "projet": "tcrouzet",
     "signes_reels": 6379,
     "signes_supprimes": 777,
     "dossiers": [
       "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2025-W26",
+    "projet": "Rush",
+    "signes_reels": 3962,
+    "signes_supprimes": 3285,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1504,8 +1567,17 @@
   },
   {
     "periode": "2025-W27",
+    "projet": "Rush",
+    "signes_reels": 5419,
+    "signes_supprimes": 4153,
+    "dossiers": [
+      "Rush"
+    ]
+  },
+  {
+    "periode": "2025-W27",
     "projet": "tcrouzet",
-    "signes_reels": 49408,
+    "signes_reels": 43781,
     "signes_supprimes": 13951,
     "dossiers": [
       "tcrouzet"
@@ -1523,7 +1595,7 @@
   {
     "periode": "2025-W28",
     "projet": "tcrouzet",
-    "signes_reels": 19745,
+    "signes_reels": 15495,
     "signes_supprimes": 3352,
     "dossiers": [
       "tcrouzet"
@@ -1532,7 +1604,7 @@
   {
     "periode": "2025-W29",
     "projet": "tcrouzet",
-    "signes_reels": 8062,
+    "signes_reels": 0,
     "signes_supprimes": 261,
     "dossiers": [
       "tcrouzet"
@@ -1550,7 +1622,7 @@
   {
     "periode": "2025-W30",
     "projet": "WIP",
-    "signes_reels": 20844,
+    "signes_reels": 18853,
     "signes_supprimes": 1795,
     "dossiers": [
       "WIP"
@@ -1559,7 +1631,7 @@
   {
     "periode": "2025-W30",
     "projet": "tcrouzet",
-    "signes_reels": 36275,
+    "signes_reels": 26977,
     "signes_supprimes": 6705,
     "dossiers": [
       "tcrouzet"
@@ -1577,10 +1649,19 @@
   {
     "periode": "2025-W31",
     "projet": "Isa",
-    "signes_reels": 9792,
+    "signes_reels": 7522,
     "signes_supprimes": 830,
     "dossiers": [
       "Zone/manuscrit"
+    ]
+  },
+  {
+    "periode": "2025-W31",
+    "projet": "Rush",
+    "signes_reels": 15,
+    "signes_supprimes": 1,
+    "dossiers": [
+      "Rush"
     ]
   },
   {
@@ -1604,7 +1685,7 @@
   {
     "periode": "2025-W32",
     "projet": "Isa",
-    "signes_reels": 40701,
+    "signes_reels": 40071,
     "signes_supprimes": 5090,
     "dossiers": [
       "Zone/manuscrit"
@@ -1639,6 +1720,15 @@
   },
   {
     "periode": "2025-W33",
+    "projet": "WIP",
+    "signes_reels": 233,
+    "signes_supprimes": 285,
+    "dossiers": [
+      "Zone"
+    ]
+  },
+  {
+    "periode": "2025-W33",
     "projet": "tcrouzet",
     "signes_reels": 18549,
     "signes_supprimes": 1945,
@@ -1666,6 +1756,15 @@
   },
   {
     "periode": "2025-W34",
+    "projet": "WIP",
+    "signes_reels": 204,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Zone"
+    ]
+  },
+  {
+    "periode": "2025-W34",
     "projet": "tcrouzet",
     "signes_reels": 28779,
     "signes_supprimes": 5133,
@@ -1689,6 +1788,24 @@
     "signes_supprimes": 9764,
     "dossiers": [
       "Zone/manuscrit"
+    ]
+  },
+  {
+    "periode": "2025-W35",
+    "projet": "Rush",
+    "signes_reels": 0,
+    "signes_supprimes": 144,
+    "dossiers": [
+      "Rush"
+    ]
+  },
+  {
+    "periode": "2025-W35",
+    "projet": "WIP",
+    "signes_reels": 174,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Zone"
     ]
   },
   {
@@ -1721,10 +1838,19 @@
   {
     "periode": "2025-W36",
     "projet": "Isa",
-    "signes_reels": 33508,
+    "signes_reels": 33180,
     "signes_supprimes": 5242,
     "dossiers": [
       "Zone/manuscrit"
+    ]
+  },
+  {
+    "periode": "2025-W36",
+    "projet": "WIP",
+    "signes_reels": 306,
+    "signes_supprimes": 126,
+    "dossiers": [
+      "Zone"
     ]
   },
   {
@@ -1739,7 +1865,7 @@
   {
     "periode": "2025-W37",
     "projet": "Isa",
-    "signes_reels": 30574,
+    "signes_reels": 27935,
     "signes_supprimes": 9778,
     "dossiers": [
       "Zone/manuscrit"
@@ -1752,6 +1878,15 @@
     "signes_supprimes": 11475,
     "dossiers": [
       "Rush/manuscrit"
+    ]
+  },
+  {
+    "periode": "2025-W37",
+    "projet": "WIP",
+    "signes_reels": 627,
+    "signes_supprimes": 206,
+    "dossiers": [
+      "Zone"
     ]
   },
   {
@@ -1793,7 +1928,7 @@
   {
     "periode": "2025-W38",
     "projet": "tcrouzet",
-    "signes_reels": 31613,
+    "signes_reels": 31044,
     "signes_supprimes": 5197,
     "dossiers": [
       "tcrouzet"
@@ -1982,7 +2117,7 @@
   {
     "periode": "2025-W46",
     "projet": "tcrouzet",
-    "signes_reels": 37831,
+    "signes_reels": 31357,
     "signes_supprimes": 16458,
     "dossiers": [
       "tcrouzet"
@@ -2036,7 +2171,7 @@
   {
     "periode": "2025-W49",
     "projet": "WIP",
-    "signes_reels": 155301,
+    "signes_reels": 153373,
     "signes_supprimes": 49722,
     "dossiers": [
       "WIP"
@@ -2117,7 +2252,7 @@
   {
     "periode": "2025-W52",
     "projet": "iT",
-    "signes_reels": 80919,
+    "signes_reels": 80647,
     "signes_supprimes": 29398,
     "dossiers": [
       "iT"
@@ -2144,7 +2279,7 @@
   {
     "periode": "2026-W01",
     "projet": "iT",
-    "signes_reels": 52706,
+    "signes_reels": 49241,
     "signes_supprimes": 12606,
     "dossiers": [
       "iT"
@@ -2207,7 +2342,7 @@
   {
     "periode": "2026-W03",
     "projet": "iT",
-    "signes_reels": 63203,
+    "signes_reels": 63120,
     "signes_supprimes": 10485,
     "dossiers": [
       "iT"
@@ -2453,12 +2588,14 @@
   {
     "periode": "2026-W16",
     "projet": "Isa",
-    "signes_reels": 12140,
+    "signes_reels": 12148,
     "signes_supprimes": 2592,
     "dossiers": [
+      "Isa",
       "Isa/Maison",
       "Isa/archives/manuscritV1",
       "Isa/manuscrit",
+      "Zone",
       "Zone/Maison",
       "Zone/archives/manuscritV1",
       "Zone/manuscrit",
@@ -2469,7 +2606,7 @@
   {
     "periode": "2026-W16",
     "projet": "tcrouzet",
-    "signes_reels": 43523,
+    "signes_reels": 25791,
     "signes_supprimes": 4434,
     "dossiers": [
       "tcrouzet"
@@ -2478,7 +2615,7 @@
   {
     "periode": "2026-W17",
     "projet": "Isa",
-    "signes_reels": 26795,
+    "signes_reels": 26763,
     "signes_supprimes": 4526,
     "dossiers": [
       "Isa/Maison",
@@ -2506,9 +2643,10 @@
   {
     "periode": "2026-W18",
     "projet": "Isa",
-    "signes_reels": 40631,
-    "signes_supprimes": 6649,
+    "signes_reels": 40820,
+    "signes_supprimes": 6975,
     "dossiers": [
+      "Isa",
       "Isa/Maison",
       "Isa/manuscrit"
     ]
@@ -2552,7 +2690,7 @@
   {
     "periode": "2026-W20",
     "projet": "Isa",
-    "signes_reels": 17033,
+    "signes_reels": 16958,
     "signes_supprimes": 4054,
     "dossiers": [
       "Isa/manuscrit"
@@ -2633,9 +2771,10 @@
   {
     "periode": "2026-W24",
     "projet": "Isa",
-    "signes_reels": 31392,
+    "signes_reels": 31351,
     "signes_supprimes": 8784,
     "dossiers": [
+      "Isa",
       "Isa/archives/manuscritV1",
       "Isa/manuscrit"
     ]
@@ -2679,9 +2818,10 @@
   {
     "periode": "2026-W26",
     "projet": "Isa",
-    "signes_reels": 47097,
-    "signes_supprimes": 26934,
+    "signes_reels": 48964,
+    "signes_supprimes": 27976,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
     ]
   },
@@ -2709,7 +2849,18 @@
     "signes_reels": 6919,
     "signes_supprimes": 2819,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-W27",
+    "projet": "WIP",
+    "signes_reels": 0,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Archives",
+      "WIP"
     ]
   },
   {
@@ -2736,7 +2887,18 @@
     "signes_reels": 7819,
     "signes_supprimes": 3092,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-W28",
+    "projet": "WIP",
+    "signes_reels": 3,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Archives",
+      "WIP"
     ]
   },
   {
@@ -2763,7 +2925,18 @@
     "signes_reels": 4468,
     "signes_supprimes": 1768,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-W29",
+    "projet": "WIP",
+    "signes_reels": 4,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "Archives",
+      "WIP"
     ]
   },
   {
@@ -2988,6 +3161,7 @@
     "signes_reels": 14671,
     "signes_supprimes": 0,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
     ]
   },
@@ -3006,6 +3180,7 @@
     "signes_reels": 25496,
     "signes_supprimes": 2220,
     "dossiers": [
+      "Isa",
       "Isa/manuscrit"
     ]
   },
