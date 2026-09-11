@@ -830,6 +830,45 @@ output_dir: site
             [len(source_text), len(source_text), len(source_text), len(source_text)],
         )
 
+    def test_deletion_recomputes_overlap_after_compilation_edits(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        sentences = [
+            " ".join(f"source{index}-mot{word}" for word in range(24)) + ". "
+            for index in range(50)
+        ]
+        source_text = "".join(sentences)
+        (manuscript / "chapters.md").write_text(source_text, encoding="utf-8")
+        self.commit("source chapters", "2026-01-01T10:00:00+01:00")
+
+        compilation = manuscript / "fusion.md"
+        initial_compilation = "".join(sentences[:15]) + self.text(10000, seed=205)
+        compilation.write_text(initial_compilation, encoding="utf-8")
+        self.commit("low-overlap compilation", "2026-01-02T10:00:00+01:00")
+        final_compilation = "".join(sentences[:45]) + self.text(500, seed=206)
+        compilation.write_text(final_compilation, encoding="utf-8")
+        self.commit("compilation heavily retouched", "2026-01-03T10:00:00+01:00")
+        compilation.unlink()
+        self.commit("retouched compilation disappears", "2026-01-04T10:00:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_reels_total"], len(source_text))
+        state = self.load("state.json")
+        temporary = next(
+            event["temporary_compilations"][0]
+            for event in state["events"]
+            if event.get("temporary_compilations")
+        )
+        self.assertGreaterEqual(temporary["overlap_ratio"], 0.5)
+        self.assertFalse(temporary["exact_content_hash"])
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len(source_text)] * 4)
+
     def test_exact_unique_file_renamed_then_deleted_is_removed_from_history(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)

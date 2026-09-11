@@ -702,6 +702,9 @@ def process_history_diff(
                     )
                     active_creation = old_lifecycle.pop("active_creation", None)
                     if active_creation:
+                        active_creation.setdefault(
+                            "file_keys", [active_creation.get("file_key")]
+                        ).append(path_key(new_path))
                         active_creation.setdefault("size_history", []).append({
                             "timestamp": commit.timestamp,
                             "size": len(new_text),
@@ -733,6 +736,44 @@ def process_history_diff(
                                 active_creation = candidate_lifecycle.pop("active_creation")
                                 break
                     if active_creation:
+                        # Le ratio figé à la création ne décrit plus un fichier
+                        # retouché. On interroge donc l'index sur son contenu au
+                        # moment de la suppression, en excluant toutes les
+                        # provenances appartenant à son propre cycle de vie.
+                        deletion_hashes = winnowed_hashes(
+                            old_text, gram_chars, selection_chars
+                        )
+                        known_at_deletion, _ = fingerprints.original_sources(
+                            deletion_hashes
+                        )
+                        files_at_deletion = fingerprints.fingerprint_files(
+                            deletion_hashes
+                        )
+                        lifecycle_file_keys = {
+                            value
+                            for value in active_creation.get(
+                                "file_keys", [active_creation.get("file_key")]
+                            )
+                            if value
+                        }
+                        externally_known = {
+                            value
+                            for value in known_at_deletion
+                            if any(
+                                path_key(source_file) not in lifecycle_file_keys
+                                for source_file in files_at_deletion.get(value, set())
+                            )
+                        }
+                        deletion_ratio = (
+                            sum(
+                                1
+                                for value in deletion_hashes
+                                if value in externally_known
+                            )
+                            / len(deletion_hashes)
+                            if deletion_hashes
+                            else 0.0
+                        )
                         lifetime = minutes_between(
                             commit.timestamp,
                             active_creation["timestamp"],
@@ -741,34 +782,53 @@ def process_history_diff(
                         exact_transient = (
                             active_creation.get("content_hash") == deleted_content_hash
                         )
-                        if exact_transient or float(active_creation.get("overlap_ratio", 0.0)) >= 0.5:
+                        if (
+                            exact_transient
+                            or deletion_ratio >= 0.5
+                            or float(active_creation.get("overlap_ratio", 0.0)) >= 0.5
+                        ):
                             original_event = events[int(active_creation["event_index"])]
-                            reclassified = min(
-                                int(active_creation["real_chars"]),
-                                int(original_event["real_chars"]),
-                            )
-                            original_event["real_chars"] -= reclassified
-                            if exact_transient:
-                                removed_internal = min(
-                                    int(active_creation.get("internal_chars", 0)),
-                                    int(original_event["internal_chars"]),
+                            contributions = active_creation.get("contributions") or [{
+                                "event_index": active_creation["event_index"],
+                                "real_chars": active_creation.get("real_chars", 0),
+                                "internal_chars": active_creation.get("internal_chars", 0),
+                            }]
+                            reclassified = 0
+                            removed_internal = 0
+                            for contribution in contributions:
+                                contribution_event = events[int(contribution["event_index"])]
+                                moved_real = min(
+                                    int(contribution.get("real_chars", 0)),
+                                    int(contribution_event["real_chars"]),
                                 )
-                                original_event["internal_chars"] -= removed_internal
-                                creation_file_key = active_creation.get("file_key")
-                                original_event["duplication_sources"] = [
-                                    source
-                                    for source in original_event.get("duplication_sources", [])
-                                    if not source.get("target_file")
-                                    or path_key(source["target_file"]) != creation_file_key
-                                ]
-                            else:
-                                removed_internal = 0
-                                original_event["internal_chars"] += reclassified
+                                contribution_event["real_chars"] -= moved_real
+                                reclassified += moved_real
+                                if exact_transient:
+                                    moved_internal = min(
+                                        int(contribution.get("internal_chars", 0)),
+                                        int(contribution_event["internal_chars"]),
+                                    )
+                                    contribution_event["internal_chars"] -= moved_internal
+                                    removed_internal += moved_internal
+                                    contribution_event["duplication_sources"] = [
+                                        source
+                                        for source in contribution_event.get(
+                                            "duplication_sources", []
+                                        )
+                                        if not source.get("target_file")
+                                        or path_key(source["target_file"])
+                                        not in lifecycle_file_keys
+                                    ]
+                                else:
+                                    contribution_event["internal_chars"] += moved_real
                             original_event.setdefault("temporary_compilations", []).append({
                                 "file": old_path,
                                 "removed_commit": commit.sha,
                                 "lifetime_minutes": round(lifetime, 3),
-                                "overlap_ratio": active_creation["overlap_ratio"],
+                                "overlap_ratio": max(
+                                    deletion_ratio,
+                                    float(active_creation.get("overlap_ratio", 0.0)),
+                                ),
                                 "reclassified_chars": reclassified,
                                 "removed_internal_chars": removed_internal,
                                 "exact_content_hash": exact_transient,
@@ -991,9 +1051,15 @@ def process_history_diff(
                     "event_index": event_indexes[record["new_project"]],
                     "real_chars": int(record["novel_chars"]),
                     "internal_chars": int(record["internal_chars"]),
+                    "contributions": [{
+                        "event_index": event_indexes[record["new_project"]],
+                        "real_chars": int(record["novel_chars"]),
+                        "internal_chars": int(record["internal_chars"]),
+                    }],
                     "overlap_ratio": round(overlap_ratio, 6),
                     "project": record["new_project"],
                     "file_key": path_key(record["new_path"]),
+                    "file_keys": [path_key(record["new_path"])],
                     "content_hash": content_hash(whole_added[0] if whole_added else ""),
                     "size": len(whole_added[0]) if whole_added else 0,
                     "size_history": [{
@@ -1002,6 +1068,21 @@ def process_history_diff(
                     }],
                     "excluded_from_size": bool(record["exclude_from_size"]),
                 }
+            for record in change_records:
+                if (
+                    record["status"] not in {"M", "R"}
+                    or not record["new_path"]
+                    or not record["new_project"]
+                ):
+                    continue
+                lifecycle = file_lifecycles.get(path_key(record["new_path"]), {})
+                active_creation = lifecycle.get("active_creation")
+                if active_creation:
+                    active_creation.setdefault("contributions", []).append({
+                        "event_index": event_indexes[record["new_project"]],
+                        "real_chars": int(record["novel_chars"]),
+                        "internal_chars": int(record["internal_chars"]),
+                    })
 
             if work:
                 relevant_commits += 1
