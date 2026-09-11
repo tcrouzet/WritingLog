@@ -11,7 +11,6 @@ import unicodedata
 from typing import Iterable
 
 
-SCHEMA_VERSION = 2
 SPACE_RE = re.compile(r"\s+", re.UNICODE)
 
 
@@ -66,15 +65,13 @@ class FingerprintIndex:
         self.connection.execute("PRAGMA synchronous=NORMAL")
         if reset:
             self.connection.executescript(
+                "DROP TABLE IF EXISTS deletion_candidate_hashes; "
                 "DROP TABLE IF EXISTS active_file_hashes; "
+                "DROP TABLE IF EXISTS fingerprint_origins; "
                 "DROP TABLE IF EXISTS fingerprints; "
-                "DROP TABLE IF EXISTS metadata;"
+                "DROP TABLE IF EXISTS commits;"
             )
         self._create_schema()
-        version = self.meta("schema_version")
-        if version not in {None, str(SCHEMA_VERSION)}:
-            raise ValueError("Index SQLite incompatible ; relancez ./analyse.sh full.")
-        self.set_meta("schema_version", str(SCHEMA_VERSION))
 
     def _create_schema(self) -> None:
         self.connection.executescript(
@@ -92,6 +89,20 @@ class FingerprintIndex:
                 ON fingerprints(file, removed_at_commit);
             CREATE INDEX IF NOT EXISTS fingerprints_file_commit
                 ON fingerprints(file, commit_hash);
+            CREATE TABLE IF NOT EXISTS commits (
+                commit_hash TEXT PRIMARY KEY,
+                commit_timestamp TEXT NOT NULL,
+                processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS fingerprint_origins (
+                hash TEXT PRIMARY KEY,
+                project TEXT NOT NULL,
+                file TEXT NOT NULL,
+                first_commit_hash TEXT NOT NULL,
+                FOREIGN KEY(first_commit_hash) REFERENCES commits(commit_hash)
+            );
+            CREATE INDEX IF NOT EXISTS fingerprint_origins_commit
+                ON fingerprint_origins(first_commit_hash);
             CREATE TABLE IF NOT EXISTS active_file_hashes (
                 file TEXT NOT NULL,
                 hash TEXT NOT NULL,
@@ -99,29 +110,22 @@ class FingerprintIndex:
                 occurrences INTEGER NOT NULL,
                 PRIMARY KEY(file, hash)
             );
-            CREATE TABLE IF NOT EXISTS metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS deletion_candidate_hashes (
+                candidate_id TEXT NOT NULL,
+                hash TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_deletion_candidate_hash
+                ON deletion_candidate_hashes(hash);
+            CREATE INDEX IF NOT EXISTS idx_deletion_candidate_id
+                ON deletion_candidate_hashes(candidate_id);
             """
         )
 
     def clear(self) -> None:
         self.connection.executescript(
-            "DELETE FROM active_file_hashes; DELETE FROM fingerprints; DELETE FROM metadata;"
-        )
-
-    def meta(self, key: str) -> str | None:
-        row = self.connection.execute(
-            "SELECT value FROM metadata WHERE key = ?", (key,)
-        ).fetchone()
-        return str(row[0]) if row else None
-
-    def set_meta(self, key: str, value: str) -> None:
-        self.connection.execute(
-            "INSERT INTO metadata(key, value) VALUES(?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
+            "DELETE FROM deletion_candidate_hashes; DELETE FROM active_file_hashes; "
+            "DELETE FROM fingerprint_origins; DELETE FROM fingerprints; "
+            "DELETE FROM commits;"
         )
 
     def _chunks(self, values: list[str], size: int | None = None) -> Iterable[list[str]]:
@@ -151,14 +155,80 @@ class FingerprintIndex:
         for chunk in self._chunks(list(known)):
             placeholders = ",".join("?" for _ in chunk)
             rows = self.connection.execute(
-                f"SELECT hash, project, file, commit_hash FROM fingerprints "
-                f"WHERE rowid IN (SELECT MIN(rowid) FROM fingerprints "
-                f"WHERE hash IN ({placeholders}) GROUP BY hash)",
+                f"SELECT hash, project, file, first_commit_hash FROM fingerprint_origins "
+                f"WHERE hash IN ({placeholders})",
                 chunk,
             )
             for fingerprint, project, file_path, commit_hash in rows:
                 first.setdefault(fingerprint, (project, file_path, commit_hash))
         return known, first
+
+    def fingerprint_files(self, hashes: list[str]) -> dict[str, set[str]]:
+        """Retourne tous les fichiers ayant porté chaque fingerprint."""
+        result: dict[str, set[str]] = {}
+        unique = list(dict.fromkeys(hashes))
+        for chunk in self._chunks(unique):
+            placeholders = ",".join("?" for _ in chunk)
+            for fingerprint, file_path in self.connection.execute(
+                f"SELECT DISTINCT hash, file FROM fingerprints "
+                f"WHERE hash IN ({placeholders})",
+                chunk,
+            ):
+                result.setdefault(fingerprint, set()).add(file_path)
+        return result
+
+    def active_hashes(self, hashes: Iterable[str]) -> set[str]:
+        """Retourne les fingerprints qui possèdent encore une occurrence active."""
+        unique = list(dict.fromkeys(hashes))
+        result: set[str] = set()
+        for chunk in self._chunks(unique):
+            placeholders = ",".join("?" for _ in chunk)
+            result.update(
+                row[0]
+                for row in self.connection.execute(
+                    f"SELECT DISTINCT hash FROM active_file_hashes "
+                    f"WHERE hash IN ({placeholders}) AND occurrences > 0",
+                    chunk,
+                )
+            )
+        return result
+
+    def add_deletion_candidate(self, candidate_id: str, hashes: Iterable[str]) -> None:
+        """Conserve les fingerprints d'une suppression sans les placer dans state.json."""
+        self.connection.executemany(
+            "INSERT INTO deletion_candidate_hashes(candidate_id, hash) VALUES(?, ?)",
+            ((candidate_id, value) for value in hashes),
+        )
+
+    def deletion_candidates_matching(self, hashes: Iterable[str]) -> set[str]:
+        """Identifie les suppressions anciennes touchées par des fingerprints nouveaux."""
+        unique = list(dict.fromkeys(hashes))
+        result: set[str] = set()
+        for chunk in self._chunks(unique):
+            placeholders = ",".join("?" for _ in chunk)
+            result.update(
+                row[0]
+                for row in self.connection.execute(
+                    f"SELECT DISTINCT candidate_id FROM deletion_candidate_hashes "
+                    f"WHERE hash IN ({placeholders})",
+                    chunk,
+                )
+            )
+        return result
+
+    def deletion_hashes(self, candidate_ids: Iterable[str]) -> dict[str, list[str]]:
+        """Recharge seulement les fingerprints des candidats à réévaluer."""
+        unique = list(dict.fromkeys(candidate_ids))
+        result: dict[str, list[str]] = {}
+        for chunk in self._chunks(unique):
+            placeholders = ",".join("?" for _ in chunk)
+            for candidate_id, value in self.connection.execute(
+                f"SELECT candidate_id, hash FROM deletion_candidate_hashes "
+                f"WHERE candidate_id IN ({placeholders}) ORDER BY rowid",
+                chunk,
+            ):
+                result.setdefault(candidate_id, []).append(value)
+        return result
 
     def update_file_delta(
         self,
@@ -251,9 +321,26 @@ class FingerprintIndex:
             "(hash, project, file, commit_hash, removed_at_commit) VALUES(?, ?, ?, ?, NULL)",
             ((value, project or "", new_file, commit_sha) for value in added),
         )
+        self.connection.executemany(
+            "INSERT OR IGNORE INTO fingerprint_origins"
+            "(hash, project, file, first_commit_hash) VALUES(?, ?, ?, ?)",
+            ((value, project or "", new_file, commit_sha) for value in added),
+        )
 
-    def commit(self, last_commit: str) -> None:
-        self.set_meta("last_commit", last_commit)
+    def record_processed_commit(self, commit_hash: str, commit_timestamp: str) -> None:
+        """Enregistre explicitement chaque commit après son traitement."""
+        self.connection.execute(
+            "INSERT OR IGNORE INTO commits(commit_hash, commit_timestamp) VALUES(?, ?)",
+            (commit_hash, commit_timestamp),
+        )
+
+    def last_processed_commit(self) -> str | None:
+        row = self.connection.execute(
+            "SELECT commit_hash FROM commits ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def commit(self) -> None:
         self.connection.commit()
 
     def rollback(self) -> None:

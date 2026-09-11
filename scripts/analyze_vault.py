@@ -9,9 +9,7 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import hashlib
 import json
-import math
 from pathlib import Path, PurePosixPath
-import pickle
 import re
 import sys
 import time
@@ -26,6 +24,7 @@ except ImportError:
 from fingerprint_index import FingerprintIndex, winnowed_hashes
 from git_utils import (
     BlobReader,
+    Change,
     GitError,
     changed_paths_batch,
     commit_exists,
@@ -34,9 +33,6 @@ from git_utils import (
     list_commits,
     list_commits_after,
 )
-
-
-STATE_VERSION = 20
 
 
 def compact_duration(seconds: float) -> str:
@@ -91,43 +87,6 @@ class ProgressBar:
                 flush=True,
             )
             self.last_log = current
-
-
-def history_identity(commits: list[Any], fingerprint: str) -> dict[str, Any]:
-    digest = hashlib.sha256()
-    for commit in commits:
-        digest.update(commit.sha.encode("ascii"))
-        digest.update(b"\0")
-    return {
-        "state_version": STATE_VERSION,
-        "history": digest.hexdigest(),
-        "config": fingerprint,
-        "commits": len(commits),
-    }
-
-
-def load_checkpoint(path: Path, identity: dict[str, Any]) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        with path.open("rb") as handle:
-            checkpoint = pickle.load(handle)
-    except (OSError, EOFError, pickle.PickleError):
-        print("Checkpoint illisible ignoré ; reconstruction depuis le début.", file=sys.stderr)
-        return None
-    if checkpoint.get("identity") != identity:
-        print("Checkpoint incompatible avec le miroir ou la configuration ; ignoré.", file=sys.stderr)
-        return None
-    return checkpoint
-
-
-def write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("wb") as handle:
-        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        handle.flush()
-    temporary.replace(path)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -276,6 +235,137 @@ def character_changes(old: str, new: str) -> tuple[list[str], list[str]]:
     return added, removed
 
 
+def classification_blocks(parts: Iterable[str]) -> list[str]:
+    """Découpe en petits groupes de phrases sans perdre de caractères.
+
+    Un paragraphe entier est une unité trop grossière : la correction d'un seul
+    mot peut modifier ses minima winnowés et recréditer des milliers de signes.
+    Les groupes courts limitent ce risque tout en restant assez longs pour
+    produire plusieurs fingerprints.
+    """
+    blocks: list[str] = []
+
+    def append_sentences(text: str) -> None:
+        pieces = re.split(r"(?<=[.!?…])([ \t\n]+)", text)
+        current = ""
+        for piece in pieces:
+            if not piece:
+                continue
+            current += piece
+            if len(current) >= 360 and re.search(r"[.!?…][ \t\n]*$", current):
+                blocks.append(current)
+                current = ""
+        if current:
+            if blocks and len(current) < 36:
+                blocks[-1] += current
+            else:
+                blocks.append(current)
+
+    for part in parts:
+        pending_separator = ""
+        for piece in re.split(r"(\n[ \t]*\n+)", part):
+            if not piece:
+                continue
+            if re.fullmatch(r"\n[ \t]*\n+", piece):
+                pending_separator += piece
+            else:
+                append_sentences(pending_separator + piece)
+                pending_separator = ""
+        if pending_separator:
+            if blocks:
+                blocks[-1] += pending_separator
+            else:
+                blocks.append(pending_separator)
+    return blocks
+
+
+def infer_edited_renames(
+    commit_sha: str,
+    changes: list[Change],
+    blobs: BlobReader,
+    extensions: set[str],
+    gram_chars: int,
+    selection_chars: int,
+) -> list[Change]:
+    """Apparie les A/D très proches que Git rate après une forte édition.
+
+    Git raisonne surtout par lignes. Dans un manuscrit aux paragraphes longs,
+    quelques corrections peuvent donc transformer un renommage évident en une
+    suppression suivie d'une création. Les fingerprints donnent ici un signal
+    mieux adapté au texte continu.
+    """
+    additions = [
+        (index, change)
+        for index, change in enumerate(changes)
+        if change.status == "A"
+        and change.new_path
+        and PurePosixPath(change.new_path).suffix.lower() in extensions
+    ]
+    deletions = [
+        (index, change)
+        for index, change in enumerate(changes)
+        if change.status == "D"
+        and change.old_path
+        and PurePosixPath(change.old_path).suffix.lower() in extensions
+    ]
+    if not additions or not deletions:
+        return changes
+
+    text_cache: dict[tuple[str, str], str] = {}
+
+    def text(ref: str, path: str) -> str:
+        key = (ref, path)
+        if key not in text_cache:
+            text_cache[key] = blobs.text(ref, path) or ""
+        return text_cache[key]
+
+    candidates: list[tuple[float, int, int]] = []
+    for add_index, addition in additions:
+        assert addition.new_path
+        new_text = text(commit_sha, addition.new_path)
+        new_hashes = set(winnowed_hashes(new_text, gram_chars, selection_chars))
+        if not new_hashes:
+            continue
+        for delete_index, deletion in deletions:
+            assert deletion.old_path
+            if PurePosixPath(addition.new_path).parent != PurePosixPath(deletion.old_path).parent:
+                continue
+            old_text = text(f"{commit_sha}^", deletion.old_path)
+            size_ratio = min(len(old_text), len(new_text)) / max(len(old_text), len(new_text), 1)
+            if size_ratio < 0.5:
+                continue
+            old_hashes = set(winnowed_hashes(old_text, gram_chars, selection_chars))
+            if not old_hashes:
+                continue
+            overlap = len(old_hashes & new_hashes) / min(len(old_hashes), len(new_hashes))
+            if overlap >= 0.7:
+                candidates.append((overlap, add_index, delete_index))
+
+    replacements: dict[int, Change] = {}
+    consumed_additions: set[int] = set()
+    consumed_deletions: set[int] = set()
+    for _, add_index, delete_index in sorted(candidates, reverse=True):
+        if add_index in consumed_additions or delete_index in consumed_deletions:
+            continue
+        addition = changes[add_index]
+        deletion = changes[delete_index]
+        replacements[add_index] = Change(
+            "R",
+            deletion.old_path,
+            addition.new_path,
+            deletion.old_oid,
+            addition.new_oid,
+        )
+        consumed_additions.add(add_index)
+        consumed_deletions.add(delete_index)
+
+    return [
+        replacements.get(index, change)
+        for index, change in enumerate(changes)
+        if index not in consumed_deletions
+    ]
+
+
 def project_for(
     path: str | None,
     extensions: set[str],
@@ -353,7 +443,6 @@ def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
     relevant = {
         "excluded_folders": config["excluded_folders"],
         "file_extensions": config["file_extensions"],
-        "import_detection": config["import_detection"],
         "internal_detection": config["internal_detection"],
         "session": config["session"],
         "project_paths": configured_project_paths(metadata),
@@ -376,9 +465,6 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
             "selection_chars": raw.get("internal_detection", {}).get("selection_chars", 180),
             "overlap_threshold": raw.get("internal_detection", {}).get("overlap_threshold", 0.85),
         },
-        "import_detection": {
-            "rate_percentile": raw.get("import_detection", {}).get("rate_percentile", 99),
-        },
         "session": {
             "timeout_minutes": raw.get("session", {}).get("timeout_minutes", 45),
         },
@@ -386,15 +472,12 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
     gram = int(result["internal_detection"]["gram_chars"])
     selection = int(result["internal_detection"]["selection_chars"])
     overlap = float(result["internal_detection"]["overlap_threshold"])
-    percentile = float(result["import_detection"]["rate_percentile"])
     if not 30 <= gram <= 40:
         raise ValueError("internal_detection.gram_chars doit être compris entre 30 et 40.")
     if selection < gram:
         raise ValueError("internal_detection.selection_chars doit être supérieur à gram_chars.")
     if not 0 < overlap <= 1:
         raise ValueError("internal_detection.overlap_threshold doit être compris entre 0 et 1.")
-    if not 0 < percentile <= 100:
-        raise ValueError("import_detection.rate_percentile doit être compris entre 0 et 100.")
     if result["session"]["timeout_minutes"] <= 0:
         raise ValueError("session.timeout_minutes doit être supérieur à zéro.")
     return result
@@ -402,15 +485,17 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
 
 def empty_state(fingerprint: str) -> dict[str, Any]:
     return {
-        "version": STATE_VERSION,
         "config_fingerprint": fingerprint,
         "last_commit": None,
         "files": {},
         "project_sizes": {},
+        "historical_project_sizes": {},
         "events": [],
         "size_points": [],
         "archive_moves": {},
-        "project_rates": {},
+        "deletion_candidates": [],
+        "file_lifecycles": {},
+        "excluded_sizes": {},
     }
 
 
@@ -426,8 +511,9 @@ def load_state(
         raise ValueError("État incrémental absent ; lancez d'abord : python scripts/analyze_vault.py full")
     with path.open(encoding="utf-8") as handle:
         state = json.load(handle)
-    if state.get("version") != STATE_VERSION:
-        raise ValueError("Version de state.json incompatible ; relancez ./analyse.sh full.")
+    # Vestige des anciens états versionnés : il n'intervient plus dans la
+    # reprise incrémentale et disparaît à la prochaine écriture.
+    state.pop("version", None)
     if state.get("config_fingerprint") != fingerprint:
         raise ValueError("La configuration d'analyse a changé ; relancez avec --full-rebuild.")
     return state
@@ -438,15 +524,6 @@ def minutes_between(newer: str, older: str | None, default: float) -> float:
         return default
     delta = (datetime.fromisoformat(newer) - datetime.fromisoformat(older)).total_seconds() / 60
     return max(0.0, delta)
-
-
-def percentile_threshold(values: list[float], percentile: float) -> float | None:
-    """Percentile empirique par rang supérieur, sans seuil de rythme fixe."""
-    if not values:
-        return None
-    ordered = sorted(float(value) for value in values)
-    rank = max(0, math.ceil(percentile / 100 * len(ordered)) - 1)
-    return ordered[rank]
 
 
 def fallback_project(path: str | None, tracked_project: str | None) -> str:
@@ -463,8 +540,6 @@ def process_history_diff(
     config: dict[str, Any],
     metadata: dict[str, Any],
     fingerprint_db: Path,
-    checkpoint_path: Path | None = None,
-    analysis_fingerprint: str = "",
     persist_index: bool = True,
 ) -> tuple[int, int]:
     """Analyse les seuls fichiers modifiés et maintient l'index SQLite."""
@@ -473,19 +548,15 @@ def process_history_diff(
     relevant_commits = 0
     if full_run:
         commits = list_commits(repo)
-        identity = history_identity(commits, analysis_fingerprint)
-        checkpoint = load_checkpoint(checkpoint_path, identity) if checkpoint_path else None
-        if checkpoint and checkpoint.get("phase") == "diff-analysis":
-            state.clear()
-            state.update(checkpoint["state"])
-            start = int(checkpoint["next_index"])
-            relevant_commits = int(checkpoint["relevant_commits"])
-            print(f"Reprise de l'analyse au commit {start}/{len(commits)}.", file=sys.stderr)
-        pending = commits[start:]
-        previous_timestamp = commits[start - 1].timestamp if start else None
+        pending = commits
+        previous_timestamp = None
     else:
-        checkpoint = None
-        previous = str(state["last_commit"])
+        with FingerprintIndex(fingerprint_db) as existing_index:
+            previous = existing_index.last_processed_commit()
+        if not previous:
+            raise ValueError("Index des commits traités absent ; lancez ./analyse.sh full.")
+        if state.get("last_commit") != previous:
+            raise ValueError("L'index SQLite ne correspond pas à state.json ; relancez ./analyse.sh full.")
         if not commit_exists(repo, previous):
             raise ValueError("Le dernier commit traité n'est plus dans l'historique ; lancez ./analyse.sh full.")
         pending = list_commits_after(repo, previous)
@@ -505,14 +576,17 @@ def process_history_diff(
     gram_chars = int(config["internal_detection"]["gram_chars"])
     selection_chars = int(config["internal_detection"]["selection_chars"])
     overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
-    rate_percentile = float(config["import_detection"]["rate_percentile"])
-    timeout_minutes = float(config["session"]["timeout_minutes"])
     files = state["files"]
     project_sizes = state["project_sizes"]
+    historical_project_sizes = state["historical_project_sizes"]
     events = state["events"]
     size_points = state["size_points"]
     archive_moves = state["archive_moves"]
-    project_rates = state["project_rates"]
+    deletion_candidates = state["deletion_candidates"]
+    file_lifecycles = state.setdefault("file_lifecycles", {})
+    excluded_sizes = state.setdefault("excluded_sizes", {})
+    first_new_deletion_candidate = len(deletion_candidates)
+    run_added_hashes: set[str] = set()
 
     def new_bucket() -> dict[str, Any]:
         return {
@@ -524,20 +598,18 @@ def process_history_diff(
             "folders": set(),
         }
 
-    reset_index = full_run and checkpoint is None
+    # Un full est une reconstruction sans état caché : la base est toujours
+    # purgée avant de rejouer le premier commit.
+    reset_index = full_run
     with FingerprintIndex(fingerprint_db, reset=reset_index) as fingerprints, BlobReader(repo) as blobs:
-        expected_index_commit = state.get("last_commit")
-        if checkpoint and fingerprints.meta("last_commit") != expected_index_commit:
-            raise ValueError(
-                "Le checkpoint et l'index SQLite divergent ; supprimez le checkpoint puis relancez ./analyse.sh full."
-            )
-        if not full_run and fingerprints.meta("last_commit") != expected_index_commit:
-            raise ValueError("L'index SQLite ne correspond pas à state.json ; relancez ./analyse.sh full.")
         total = len(commits) if full_run else len(pending)
         progress = ProgressBar("Analyse chronologique", total, start if full_run else 0)
         batch_start = -1
         batch_changes: dict[str, list[Any]] = {}
         for relative_index, commit in enumerate(pending, start=1):
+            # Inséré dans la même transaction que ses fingerprints. Tant que
+            # celle-ci n'est pas validée, le commit n'est pas considéré traité.
+            fingerprints.record_processed_commit(commit.sha, commit.timestamp)
             wanted_batch_start = ((relative_index - 1) // 100) * 100
             if wanted_batch_start != batch_start:
                 batch_start = wanted_batch_start
@@ -550,11 +622,19 @@ def process_history_diff(
             absolute_index = start + relative_index
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
-            touched_sizes: set[str] = set()
+            touched_historical_sizes: set[str] = set()
             change_records: list[dict[str, Any]] = []
             commit_added_hashes: list[str] = []
 
-            for change in batch_changes.get(commit.sha, []):
+            commit_changes = infer_edited_renames(
+                commit.sha,
+                batch_changes.get(commit.sha, []),
+                blobs,
+                extensions,
+                gram_chars,
+                selection_chars,
+            )
+            for change in commit_changes:
                 old_path = change.old_path or (change.new_path if change.status != "A" else None)
                 new_path = change.new_path
                 old_md = bool(old_path and PurePosixPath(old_path).suffix.lower() in extensions)
@@ -576,7 +656,6 @@ def process_history_diff(
 
                 if old_current and change.status != "C":
                     project_sizes[old_current] = max(0, int(project_sizes.get(old_current, 0)) - len(old_text))
-                    touched_sizes.add(old_current)
                     if old_path:
                         files.pop(path_key(old_path), None)
                 if new_current:
@@ -586,7 +665,18 @@ def process_history_diff(
                         "project": new_current,
                         "last_timestamp": commit.timestamp,
                     }
-                    touched_sizes.add(new_current)
+
+                if old_project and change.status != "C":
+                    historical_project_sizes[old_project] = max(
+                        0,
+                        int(historical_project_sizes.get(old_project, 0)) - len(old_text),
+                    )
+                    touched_historical_sizes.add(old_project)
+                if new_project:
+                    historical_project_sizes[new_project] = (
+                        int(historical_project_sizes.get(new_project, 0)) + len(new_text)
+                    )
+                    touched_historical_sizes.add(new_project)
 
                 if change.status == "A":
                     added_parts, removed_parts = ([new_text] if new_text else []), []
@@ -594,6 +684,83 @@ def process_history_diff(
                     added_parts, removed_parts = [], []
                 else:
                     added_parts, removed_parts = character_changes(old_text, new_text)
+                added_parts = classification_blocks(added_parts)
+                removed_parts = classification_blocks(removed_parts)
+                whole_added_block = (
+                    (new_text, winnowed_hashes(new_text, gram_chars, selection_chars))
+                    if change.status == "A" and new_text
+                    else None
+                )
+                lifecycle_key = path_key(new_path or old_path) if (new_path or old_path) else None
+                lifecycle = file_lifecycles.setdefault(
+                    lifecycle_key, {"additions": 0, "deletions": 0}
+                ) if lifecycle_key else {"additions": 0, "deletions": 0}
+                reappeared_file = bool(
+                    change.status == "A"
+                    and lifecycle["additions"] > 0
+                    and lifecycle["deletions"] > 0
+                )
+                if change.status == "A":
+                    lifecycle["additions"] += 1
+                elif change.status == "D":
+                    lifecycle["deletions"] += 1
+                    active_creation = lifecycle.pop("active_creation", None)
+                    if active_creation:
+                        if active_creation.get("excluded_from_size"):
+                            excluded_sizes[active_creation["project"]] = max(
+                                0,
+                                int(excluded_sizes.get(active_creation["project"], 0))
+                                - int(active_creation["size"]),
+                            )
+                        lifetime = minutes_between(
+                            commit.timestamp,
+                            active_creation["timestamp"],
+                            float("inf"),
+                        )
+                        if float(active_creation.get("overlap_ratio", 0.0)) >= 0.5:
+                            original_event = events[int(active_creation["event_index"])]
+                            reclassified = min(
+                                int(active_creation["real_chars"]),
+                                int(original_event["real_chars"]),
+                            )
+                            original_event["real_chars"] -= reclassified
+                            original_event["internal_chars"] += reclassified
+                            original_event.setdefault("temporary_compilations", []).append({
+                                "file": old_path,
+                                "removed_commit": commit.sha,
+                                "lifetime_minutes": round(lifetime, 3),
+                                "overlap_ratio": active_creation["overlap_ratio"],
+                                "reclassified_chars": reclassified,
+                            })
+                            if not active_creation.get("excluded_from_size"):
+                                size_history = active_creation.get("size_history", [])
+                                for point in size_points:
+                                    if (
+                                        point["project"] != active_creation["project"]
+                                        or point["timestamp"] < active_creation["timestamp"]
+                                    ):
+                                        continue
+                                    effective_size = int(active_creation["size"])
+                                    for historical_size in size_history:
+                                        if historical_size["timestamp"] <= point["timestamp"]:
+                                            effective_size = int(historical_size["size"])
+                                    point["size"] = max(0, int(point["size"]) - effective_size)
+
+                elif change.status == "M" and lifecycle.get("active_creation"):
+                    active_creation = lifecycle["active_creation"]
+                    active_creation.setdefault("size_history", []).append({
+                        "timestamp": commit.timestamp,
+                        "size": len(new_text),
+                    })
+                    if active_creation.get("excluded_from_size"):
+                        project = active_creation["project"]
+                        excluded_sizes[project] = max(
+                            0,
+                            int(excluded_sizes.get(project, 0))
+                            + len(new_text)
+                            - int(active_creation["size"]),
+                        )
+                    active_creation["size"] = len(new_text)
                 added_blocks = [
                     (part, winnowed_hashes(part, gram_chars, selection_chars))
                     for part in added_parts
@@ -605,6 +772,8 @@ def process_history_diff(
                 commit_added_hashes.extend(
                     value for _, block_hashes in added_blocks for value in block_hashes
                 )
+                if whole_added_block:
+                    commit_added_hashes.extend(whole_added_block[1])
                 change_records.append({
                     "status": change.status,
                     "old_path": old_path if old_md else None,
@@ -613,7 +782,12 @@ def process_history_diff(
                     "new_project": new_project,
                     "index_project": fallback_project(new_path or old_path, new_project or old_project),
                     "added_blocks": added_blocks,
+                    "whole_added_block": whole_added_block,
+                    "reappeared_file": reappeared_file,
                     "removed_blocks": removed_blocks,
+                    "novel_chars": 0,
+                    "internal_chars": 0,
+                    "exclude_from_size": False,
                 })
 
                 if old_project and change.status == "R" and new_path:
@@ -625,14 +799,52 @@ def process_history_diff(
                         }
 
             known_hashes, source_by_hash = fingerprints.original_sources(commit_added_hashes)
+            run_added_hashes.update(commit_added_hashes)
+            # L'index SQL représente les commits précédents. Cet ensemble est
+            # enrichi bloc après bloc afin qu'une seconde occurrence créée dans
+            # le même commit soit déjà reconnue comme duplication.
+            commit_known_hashes = set(known_hashes)
             for record in change_records:
                 new_project = record["new_project"]
                 if new_project:
-                    for part, block_hashes in record["added_blocks"]:
-                        matched = sum(1 for value in block_hashes if value in known_hashes)
+                    blocks_to_classify = record["added_blocks"]
+                    whole_added = record["whole_added_block"]
+                    if whole_added:
+                        whole_text, whole_hashes = whole_added
+                        whole_matched = sum(
+                            1 for value in whole_hashes if value in commit_known_hashes
+                        )
+                        whole_ratio = (
+                            whole_matched / len(whole_hashes) if whole_hashes else 0.0
+                        )
+                        # Un nouveau fichier globalement recouvert est une
+                        # compilation. Le découpage par paragraphes ne doit pas
+                        # recréditer ses marges ou ses passages légèrement édités.
+                        # Un fichier déjà apparu puis supprimé est en outre un
+                        # artefact de compilation récurrent dès que la majorité
+                        # de son contenu possède une origine antérieure.
+                        repeated_compilation = (
+                            record["reappeared_file"] and whole_ratio >= 0.5
+                        )
+                        if whole_hashes and (
+                            whole_ratio >= overlap_threshold or repeated_compilation
+                        ):
+                            blocks_to_classify = [whole_added]
+                            record["force_whole_internal"] = repeated_compilation
+                            record["exclude_from_size"] = True
+
+                    for part, block_hashes in blocks_to_classify:
+                        matched = sum(1 for value in block_hashes if value in commit_known_hashes)
                         ratio = matched / len(block_hashes) if block_hashes else 0.0
-                        if block_hashes and ratio >= overlap_threshold:
+                        # À cette granularité courte, une seule empreinte exacte
+                        # de 36 caractères suffit à conserver la filiation. Un
+                        # seuil de 85 % recréditerait tout un groupe de phrases
+                        # dès que quelques mots ont été corrigés.
+                        if block_hashes and (
+                            matched > 0 or record.get("force_whole_internal", False)
+                        ):
                             work[new_project]["internal"] += len(part)
+                            record["internal_chars"] += len(part)
                             work[new_project]["internal_hashes"].update(block_hashes)
                             origin_counts: dict[tuple[str, str, str], int] = defaultdict(int)
                             for value in block_hashes:
@@ -660,9 +872,19 @@ def process_history_diff(
                             })
                         else:
                             work[new_project]["novel"] += len(part)
+                            record["novel_chars"] += len(part)
+                        for value in block_hashes:
+                            source_by_hash.setdefault(
+                                value,
+                                (new_project, record["new_path"], commit.sha),
+                            )
+                        commit_known_hashes.update(block_hashes)
                     if record["removed_blocks"] and record["status"] not in {"R", "C"}:
                         target = record["old_project"] or new_project
-                        work[target]["removed"].extend(record["removed_blocks"])
+                        work[target]["removed"].extend(
+                            (record["old_path"], part, block_hashes)
+                            for part, block_hashes in record["removed_blocks"]
+                        )
 
                 fingerprints.update_file_delta(
                     record["old_path"],
@@ -681,74 +903,133 @@ def process_history_diff(
                     ),
                 )
 
-            commit_internal_hashes = set().union(
-                *(values["internal_hashes"] for values in work.values())
-            ) if work else set()
+            event_indexes: dict[str, int] = {}
             for project, values in work.items():
-                removed_chars = 0
-                for part, removed_hashes in values["removed"]:
-                    overlap = (
-                        sum(1 for value in removed_hashes if value in commit_internal_hashes)
-                        / len(removed_hashes)
-                        if removed_hashes else 0.0
-                    )
-                    if overlap < overlap_threshold:
-                        removed_chars += len(part)
-
                 novel_chars = int(values["novel"])
                 interval_start = commit_intervals.get(commit.sha)
                 gap = minutes_between(commit.timestamp, interval_start, 0.0) if interval_start else 0.0
-                rates = [float(value) for value in project_rates.get(project, [])]
-                threshold = percentile_threshold(rates, rate_percentile)
                 current_rate = novel_chars / gap if novel_chars > 0 and gap > 0 else None
-                is_import = current_rate is not None and threshold is not None and current_rate > threshold
-                real_chars = 0 if is_import else novel_chars
-                import_chars = novel_chars if is_import else 0
+                # Les fingerprints décident seuls : déjà connu signifie copie ou
+                # déplacement ; inconnu signifie production nouvelle. La vitesse
+                # reste informative et ne requalifie jamais le texte en import.
+                real_chars = novel_chars
+                event_index = len(events)
+                event_indexes[project] = event_index
                 events.append({
                     "timestamp": commit.timestamp,
                     "interval_start": interval_start,
                     "commit": commit.sha,
                     "project": project,
                     "real_chars": real_chars,
-                    "import_chars": import_chars,
+                    "import_chars": 0,
                     "internal_chars": values["internal"],
-                    "edit_delta": -removed_chars,
+                    "edit_delta": 0,
                     "folders": sorted(values["folders"]),
                     "rate_chars_per_minute": current_rate,
-                    "rate_percentile_threshold": threshold,
+                    "rate_percentile_threshold": None,
                     "duplication_sources": values["sources"],
                 })
-                if (
-                    real_chars > 0
-                    and current_rate is not None
-                    and 0 < gap <= timeout_minutes
-                ):
-                    project_rates.setdefault(project, []).append(current_rate)
+                for candidate_number, (source_file, part, removed_hashes) in enumerate(values["removed"]):
+                    if not removed_hashes:
+                        events[event_index]["edit_delta"] -= len(part)
+                        continue
+                    candidate_id = f"{commit.sha}:{event_index}:{candidate_number}"
+                    deletion_candidates.append({
+                        "id": candidate_id,
+                        "event_index": event_index,
+                        "project": project,
+                        "file": source_file,
+                        "commit": commit.sha,
+                        "characters": len(part),
+                        "counted": False,
+                        "resolved": False,
+                    })
+                    fingerprints.add_deletion_candidate(candidate_id, removed_hashes)
+
+            for record in change_records:
+                if record["status"] != "A" or not record["new_path"] or not record["new_project"]:
+                    continue
+                lifecycle = file_lifecycles[path_key(record["new_path"])]
+                whole_added = record["whole_added_block"]
+                whole_hashes = whole_added[1] if whole_added else []
+                matched = sum(1 for value in whole_hashes if value in known_hashes)
+                overlap_ratio = matched / len(whole_hashes) if whole_hashes else 0.0
+                lifecycle["active_creation"] = {
+                    "timestamp": commit.timestamp,
+                    "event_index": event_indexes[record["new_project"]],
+                    "real_chars": int(record["novel_chars"]),
+                    "overlap_ratio": round(overlap_ratio, 6),
+                    "project": record["new_project"],
+                    "size": len(whole_added[0]) if whole_added else 0,
+                    "size_history": [],
+                    "excluded_from_size": bool(record["exclude_from_size"]),
+                }
+                if record["exclude_from_size"] and whole_added:
+                    excluded_sizes[record["new_project"]] = (
+                        int(excluded_sizes.get(record["new_project"], 0))
+                        + len(whole_added[0])
+                    )
 
             if work:
                 relevant_commits += 1
-            for project in sorted(touched_sizes):
+            for project in sorted(touched_historical_sizes):
                 size_points.append({
                     "timestamp": commit.timestamp,
                     "commit": commit.sha,
                     "project": project,
-                    "size": int(project_sizes.get(project, 0)),
+                    "size": max(
+                        0,
+                        int(historical_project_sizes.get(project, 0))
+                        - int(excluded_sizes.get(project, 0)),
+                    ),
                 })
             state["last_commit"] = commit.sha
             progress.update(display_index)
-            if full_run and checkpoint_path and (
-                absolute_index % 100 == 0 or absolute_index == len(commits)
-            ):
-                fingerprints.commit(commit.sha)
-                write_checkpoint(checkpoint_path, {
-                    "identity": identity,
-                    "phase": "diff-analysis",
-                    "next_index": absolute_index,
-                    "state": state,
-                    "relevant_commits": relevant_commits,
-                })
+        # Les candidats créés pendant cette exécution doivent tous être jugés.
+        # Pour une mise à jour incrémentale, un ancien candidat ne peut changer
+        # de verdict que si l'un de ses fingerprints vient de réapparaître : on
+        # évite ainsi de rescanner toutes les suppressions historiques.
+        matching_old_candidates = fingerprints.deletion_candidates_matching(run_added_hashes)
+        unresolved = [
+            candidate
+            for index, candidate in enumerate(deletion_candidates)
+            if not candidate["resolved"]
+            and (
+                full_run
+                or index >= first_new_deletion_candidate
+                or candidate["id"] in matching_old_candidates
+            )
+        ]
+        candidate_hashes = fingerprints.deletion_hashes(
+            candidate["id"] for candidate in unresolved
+        )
+        all_removed_hashes = [value for hashes in candidate_hashes.values() for value in hashes]
+        files_by_hash = fingerprints.fingerprint_files(all_removed_hashes)
+        still_active_hashes = fingerprints.active_hashes(all_removed_hashes)
+        for candidate in unresolved:
+            hashes = candidate_hashes.get(candidate["id"], [])
+            matching = sum(
+                1
+                for value in hashes
+                if value in still_active_hashes
+                or any(path != candidate["file"] for path in files_by_hash.get(value, set()))
+            )
+            ratio = matching / len(hashes) if hashes else 0.0
+            event = events[int(candidate["event_index"])]
+            # Même symétrie pour les suppressions : une empreinte retrouvée
+            # ailleurs suffit à établir que le passage n'a pas disparu.
+            if matching > 0:
+                if candidate["counted"]:
+                    event["edit_delta"] += int(candidate["characters"])
+                candidate["resolved"] = True
+                candidate["counted"] = False
+                candidate["overlap_ratio"] = round(ratio, 6)
+            elif not candidate["counted"]:
+                event["edit_delta"] -= int(candidate["characters"])
+                candidate["counted"] = True
+
         if state.get("last_commit") and persist_index:
-            fingerprints.commit(state["last_commit"])
+            fingerprints.commit()
         elif not persist_index:
             fingerprints.rollback()
     return len(pending), relevant_commits
@@ -930,6 +1211,18 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
         custom = custom if isinstance(custom, dict) else {}
         real_total = sum(int(event["real_chars"]) for event in project_events)
         deleted_total = sum(max(0, -int(event.get("edit_delta", 0))) for event in project_events)
+        historical_added_total = sum(
+            int(event.get("real_chars", 0))
+            + int(event.get("import_chars", 0))
+            + int(event.get("internal_chars", 0))
+            for event in project_events
+        )
+        if deleted_total > historical_added_total:
+            print(
+                f"Avertissement : {project} totalise {deleted_total} signes supprimés, "
+                f"davantage que les {historical_added_total} signes ajoutés au fil de son histoire.",
+                file=sys.stderr,
+            )
         time_unknown = any(
             values["temps_inconnu"]
             for (day, candidate), values in daily.items()
@@ -942,24 +1235,30 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
             "temps_minutes_total": None if time_unknown else round(project_minutes.get(project, 0.0), 2),
             "signes_reels_total": real_total,
             "signes_supprimes_total": deleted_total,
-            "taille_actuelle": int(state["project_sizes"].get(project, 0)),
+            "taille_actuelle": max(
+                0,
+                int(state["project_sizes"].get(project, 0))
+                - int(state.get("excluded_sizes", {}).get(project, 0)),
+            ),
             "date_creation": project_events[0]["timestamp"] if project_events else None,
             "derniere_activite": project_events[-1]["timestamp"] if project_events else None,
         })
 
-    # Cette série mesure la production cumulée, pas la taille physique du dossier :
-    # imports, copies et déplacements n'y entrent donc jamais.
-    cumulative: dict[str, int] = defaultdict(int)
-    sizes: list[dict[str, Any]] = []
-    for row in daily_rows:
-        project = row["projet"]
-        cumulative[project] += int(row["signes_reels"])
-        sizes.append({
-            "date": row["periode"],
-            "projet": project,
-            # Nom conservé pour compatibilité avec le dashboard existant.
-            "taille_signes": cumulative[project],
-        })
+    # Taille logique du manuscrit : contenu physique moins les compilations et
+    # doublons reconnus. Plusieurs commits le même jour sont ramenés au dernier
+    # état connu.
+    daily_sizes: dict[tuple[str, str], int] = {}
+    for point in sorted(
+        state.get("size_points", []),
+        key=lambda item: (item["timestamp"], item["commit"], item["project"]),
+    ):
+        day = datetime.fromisoformat(point["timestamp"]).date().isoformat()
+        daily_sizes[(day, point["project"])] = int(point["size"])
+    sizes = [
+        {"date": day, "projet": project, "taille_signes": size}
+        for (day, project), size in sorted(daily_sizes.items())
+        if project in active_projects
+    ]
 
     total_real = sum(project["signes_reels_total"] for project in projects)
     total_deleted = sum(project["signes_supprimes_total"] for project in projects)
@@ -1070,7 +1369,6 @@ def main() -> int:
         output = (base_dir / config["output_dir"]).resolve()
         archived_projects_path = (base_dir / config["archived_projects_file"]).resolve()
         fingerprint_db = (base_dir / config["fingerprint_db"]).resolve()
-        checkpoint_path = base_dir / ".cache" / "full-analysis.checkpoint"
         data_dir = output / "data"
         if not history_repo.exists() and config.get("history_repo"):
             raise ValueError(
@@ -1080,15 +1378,18 @@ def main() -> int:
         ensure_repository(history_repo)
         fingerprint = config_fingerprint(config, metadata)
         full_rebuild = args.mode == "full" or args.full_rebuild
-        state = load_state(data_dir / "state.json", fingerprint, full_rebuild, config)
+        state = load_state(
+            data_dir / "state.json",
+            fingerprint,
+            full_rebuild,
+            config,
+        )
         processed, relevant = process_history_diff(
             history_repo,
             state,
             config,
             metadata,
             fingerprint_db,
-            checkpoint_path=checkpoint_path if full_rebuild else None,
-            analysis_fingerprint=fingerprint,
             persist_index=full_rebuild or not args.dry_run,
         )
         exports = aggregate(state, config, metadata)
@@ -1097,8 +1398,6 @@ def main() -> int:
                 write_json(data_dir / f"{name}.json", payload)
             write_json(data_dir / "state.json", state)
             write_yaml(archived_projects_path, archived_project_candidates(vault, state, metadata))
-            if full_rebuild:
-                checkpoint_path.unlink(missing_ok=True)
     except (GitError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1

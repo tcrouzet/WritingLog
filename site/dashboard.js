@@ -10,7 +10,7 @@
   let data;
   let selectedProject = "all";
   let productionGranularity = "day";
-  const periods = { daily: "30d", productivity: "30d", time: "1y", size: "all" };
+  const periods = { daily: "30d", time: "1y", size: "all" };
 
   const title = id => data.projects.find(project => project.id === id)?.title || id;
   const color = id => {
@@ -152,41 +152,28 @@
     return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${period}T12:00:00Z`));
   }
 
-  function stackedChart(canvas, rows, kind) {
+  function productionChart(canvas, rows, kind) {
     const visibleIds = new Set(visibleProjects().map(project => project.id));
     const visibleRows = rows.filter(row => visibleIds.has(row.projet));
     const temporal = temporalAxis(visibleRows);
-    const datasets = visibleProjects().flatMap(project => {
+    const datasets = visibleProjects().map(project => {
       const rows = visibleRows.filter(row => row.projet === project.id);
-      const point = (row, kind) => ({
+      const point = row => ({
         x: periodTimestamp(row.periode),
-        y: kind === "deleted" ? -(row.signes_supprimes || 0) : row.signes_reels,
-        chars: kind === "deleted" ? (row.signes_supprimes || 0) : row.signes_reels,
-        activity: row.signes_reels + (row.signes_supprimes || 0),
-        kind,
+        y: row.signes_reels,
+        chars: row.signes_reels,
         period: row.periode,
         minutes: row.temps_minutes,
         estimated: Boolean(row.temps_estime),
         folders: row.dossiers || []
       });
-      return [
-        {
-          label: `${project.title} · ajoutés`,
-          data: rows.map(row => point(row, "added")),
-          backgroundColor: color(project.id),
-          borderRadius: 2,
-          maxBarThickness: 32
-        },
-        {
-          label: `${project.title} · supprimés`,
-          data: rows.map(row => point(row, "deleted")),
-          backgroundColor: `${color(project.id)}66`,
-          borderColor: color(project.id),
-          borderWidth: 1,
-          borderRadius: 2,
-          maxBarThickness: 32
-        }
-      ];
+      return {
+        label: project.title,
+        data: rows.map(point),
+        backgroundColor: color(project.id),
+        borderRadius: 2,
+        maxBarThickness: 32
+      };
     });
     const options = commonOptions(true, temporal);
     if (temporal) {
@@ -196,13 +183,13 @@
     }
     options.plugins.tooltip.callbacks = {
       title: items => productionPeriodLabel(items[0].raw.period, kind),
-      label: context => `${context.raw.kind === "deleted" ? "Supprimés" : "Ajoutés"} : ${context.raw.kind === "deleted" ? "−" : ""}${formatter.format(context.raw.chars)} signes`,
+      label: context => `Produits : ${formatter.format(context.raw.chars)} signes`,
       afterLabel: context => {
         const minutes = context.raw.minutes === null ? null : Number(context.raw.minutes);
-        const rate = minutes > 0 ? Math.round(context.raw.activity * 60 / minutes) : null;
+        const rate = minutes > 0 ? Math.round(context.raw.chars * 60 / minutes) : null;
         const folders = context.raw.folders.length ? context.raw.folders.join(", ") : "—";
         const timeLabel = minutes === null ? "Temps : inconnu" : `${context.raw.estimated ? "Temps estimé" : "Temps observé"} : ${duration(minutes)}`;
-        return [`Dossier : ${folders}`, timeLabel, `Activité : ${rate === null ? "—" : formatter.format(rate)} signes travaillés/heure`];
+        return [`Dossier : ${folders}`, timeLabel, `Production : ${rate === null ? "—" : formatter.format(rate)} signes/heure`];
       }
     };
     return new Chart(canvas, { type: "bar", data: { datasets }, options });
@@ -401,52 +388,6 @@
     });
   }
 
-  function productivityChart(canvas) {
-    const visibleIds = new Set(visibleProjects().map(project => project.id));
-    const rows = periodRows(data.daily, "day", periods.productivity).filter(row => visibleIds.has(row.projet));
-    const days = new Map();
-    for (const row of rows) {
-      const value = days.get(row.periode) || { signes: 0, minutes: 0, timeKnown: true, estimated: false };
-      value.signes += row.signes_reels + (row.signes_supprimes || 0);
-      if (row.temps_minutes === null) value.timeKnown = false;
-      else value.minutes += row.temps_minutes;
-      value.estimated = value.estimated || Boolean(row.temps_estime);
-      days.set(row.periode, value);
-    }
-    const temporal = temporalAxis(rows);
-    const entries = [...days.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const options = commonOptions(false, temporal);
-    options.interaction = { mode: "index", intersect: false };
-    options.scales.y = {
-      type: "linear", position: "left", beginAtZero: true,
-      border: { display: false }, grid: { color: "#e8eaed" },
-      title: { display: true, text: "Heures" }, ticks: { color: "#5f6368" }
-    };
-    options.scales.yRate = {
-      type: "linear", position: "right", beginAtZero: true,
-      border: { display: false }, grid: { drawOnChartArea: false },
-      title: { display: true, text: "Signes / heure" }, ticks: { color: "#5f6368", callback: value => formatter.format(value) }
-    };
-    return new Chart(canvas, {
-      data: {
-        datasets: [
-          {
-            type: "bar", label: "Temps disponible",
-            data: entries.map(([day, value]) => ({ x: periodTimestamp(day), y: value.timeKnown ? Math.round(value.minutes / 6) / 10 : null, estimated: value.estimated })),
-            backgroundColor: "rgba(26, 115, 232, .3)", borderColor: "#1a73e8", borderWidth: 1, borderRadius: 2, yAxisID: "y"
-          },
-          {
-            type: "line", label: "Signes travaillés / heure",
-            data: entries.map(([day, value]) => ({ x: periodTimestamp(day), y: value.timeKnown && value.minutes > 0 ? Math.round(value.signes * 60 / value.minutes) : null })),
-            borderColor: "#ea4335", backgroundColor: "#ea4335", pointRadius: entries.length > 80 ? 1 : 3,
-            pointHoverRadius: 5, tension: .12, yAxisID: "yRate"
-          }
-        ]
-      },
-      options
-    });
-  }
-
   function filteredSizes(period) {
     const cutoff = cutoffDate(period);
     const result = [];
@@ -470,9 +411,7 @@
     selectedTitle.hidden = selectedProject === "all";
     selectedTitle.textContent = selectedProject === "all" ? "" : title(selectedProject);
     const productionData = productionGranularity === "week" ? data.weekly : productionGranularity === "month" ? data.monthly : data.daily;
-    charts.daily = stackedChart(document.querySelector("#daily-chart"), periodRows(productionData, productionGranularity, periods.daily), productionGranularity);
-    charts.productivity = productivityChart(document.querySelector("#productivity-chart"));
-
+    charts.daily = productionChart(document.querySelector("#daily-chart"), periodRows(productionData, productionGranularity, periods.daily), productionGranularity);
     const timePanel = document.querySelector("#time-panel");
     timePanel.hidden = selectedProject !== "all";
     if (selectedProject === "all") {
@@ -506,8 +445,8 @@
         borderColor: color(project.id),
         pointRadius: sizes.length > 100 ? 0 : 2,
         pointHoverRadius: 5,
-        spanGaps: true,
-        tension: .12
+        spanGaps: false,
+        tension: 0
       };
     });
     const sizeOptions = commonOptions(false, sizeTemporal);

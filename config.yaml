@@ -9,10 +9,6 @@ excluded_folders:
 
 file_extensions: [".md"]
 
-import_detection:
-  # Percentile empirique des rythmes déjà observés sur chaque projet.
-  rate_percentile: 99
-
 internal_detection:
   gram_chars: 36
   selection_chars: 180

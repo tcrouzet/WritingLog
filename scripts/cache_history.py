@@ -25,6 +25,23 @@ def git_output(repo: Path, *args: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def commit_set(repo: Path) -> set[str]:
+    """Instantané des commits atteignables par toutes les références du dépôt."""
+    output = git_output(repo, "rev-list", "--all") or ""
+    return {line for line in output.splitlines() if line}
+
+
+def describe_commit(repo: Path, commit_hash: str) -> str:
+    description = git_output(
+        repo,
+        "show",
+        "-s",
+        "--format=%h · %cI · %s",
+        commit_hash,
+    )
+    return description or commit_hash[:12]
+
+
 def valid_mirror(target: Path, source: Path) -> bool:
     return (
         git_output(target, "rev-parse", "--is-bare-repository") == "true"
@@ -75,11 +92,47 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 1
+            commits_before = commit_set(target)
+            head_before = git_output(target, "rev-parse", "HEAD")
             print(f"Synchronisation du miroir : {target}", flush=True)
             subprocess.run(
                 ["git", "-C", str(target), "remote", "update", "--prune"],
                 check=True,
             )
+            commits_after = commit_set(target)
+            added_commits = commits_after - commits_before
+            removed_commits = commits_before - commits_after
+            head_after = git_output(target, "rev-parse", "HEAD")
+            if added_commits:
+                complete_history = (git_output(
+                    target,
+                    "log",
+                    "--all",
+                    "--reverse",
+                    "--topo-order",
+                    "--format=%H",
+                ) or "").splitlines()
+                ordered_added = [commit_hash for commit_hash in complete_history if commit_hash in added_commits]
+                count = len(added_commits)
+                print(f"Nouveaux commits récupérés : {count}.")
+                for commit_hash in ordered_added[-10:]:
+                    print(f"  + {describe_commit(target, commit_hash)}")
+                if count > 10:
+                    print(f"  … et {count - 10} autre(s).")
+            else:
+                print("Aucun nouveau commit : le miroir était déjà à jour.")
+            if removed_commits:
+                print(
+                    f"Réécriture détectée : {len(removed_commits)} ancien(s) commit(s) "
+                    "ne sont plus référencés.",
+                    file=sys.stderr,
+                )
+            if head_before != head_after:
+                before_label = head_before[:12] if head_before else "absent"
+                after_label = head_after[:12] if head_after else "absent"
+                print(f"HEAD du miroir : {before_label} → {after_label}")
+            elif head_after:
+                print(f"HEAD du miroir inchangé : {head_after[:12]}")
         else:
             if target.exists() or target.is_symlink():
                 print(f"Suppression de l'ancien cache : {target}", flush=True)

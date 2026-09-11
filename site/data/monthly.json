@@ -2,8 +2,8 @@
   {
     "periode": "2024-01",
     "projet": "BornToBike",
-    "signes_reels": 8012,
-    "signes_supprimes": 337,
+    "signes_reels": 8853,
+    "signes_supprimes": 239,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -35,8 +35,8 @@
   {
     "periode": "2024-01",
     "projet": "IA",
-    "signes_reels": 394760,
-    "signes_supprimes": 19862,
+    "signes_reels": 296856,
+    "signes_supprimes": 6344,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -57,8 +57,8 @@
   {
     "periode": "2024-01",
     "projet": "WIP",
-    "signes_reels": 89862,
-    "signes_supprimes": 1302,
+    "signes_reels": 27014,
+    "signes_supprimes": 800,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -68,8 +68,8 @@
   {
     "periode": "2024-02",
     "projet": "BornToBike",
-    "signes_reels": 245,
-    "signes_supprimes": 722,
+    "signes_reels": 5437,
+    "signes_supprimes": 663,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -90,7 +90,7 @@
   {
     "periode": "2024-02",
     "projet": "IA",
-    "signes_reels": 21,
+    "signes_reels": 5696,
     "signes_supprimes": 20,
     "temps_minutes": null,
     "temps_estime": false,
@@ -123,8 +123,8 @@
   {
     "periode": "2024-03",
     "projet": "BornToBike",
-    "signes_reels": 36,
-    "signes_supprimes": 787,
+    "signes_reels": 1297,
+    "signes_supprimes": 611,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -145,8 +145,8 @@
   {
     "periode": "2024-03",
     "projet": "IA",
-    "signes_reels": 1,
-    "signes_supprimes": 1379,
+    "signes_reels": 12161,
+    "signes_supprimes": 1378,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -167,8 +167,8 @@
   {
     "periode": "2024-04",
     "projet": "BornToBike",
-    "signes_reels": 2,
-    "signes_supprimes": 1330,
+    "signes_reels": 5736,
+    "signes_supprimes": 986,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -178,8 +178,8 @@
   {
     "periode": "2024-04",
     "projet": "Carnets",
-    "signes_reels": 24865,
-    "signes_supprimes": 19681,
+    "signes_reels": 17369,
+    "signes_supprimes": 8296,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -189,8 +189,8 @@
   {
     "periode": "2024-04",
     "projet": "tcrouzet",
-    "signes_reels": 12520204,
-    "signes_supprimes": 1973813,
+    "signes_reels": 6690136,
+    "signes_supprimes": 1073218,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -200,8 +200,8 @@
   {
     "periode": "2024-05",
     "projet": "BornToBike",
-    "signes_reels": 94,
-    "signes_supprimes": 758,
+    "signes_reels": 932,
+    "signes_supprimes": 269,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -211,7 +211,7 @@
   {
     "periode": "2024-05",
     "projet": "IA",
-    "signes_reels": 0,
+    "signes_reels": 2143,
     "signes_supprimes": 15,
     "temps_minutes": null,
     "temps_estime": false,
@@ -222,8 +222,8 @@
   {
     "periode": "2024-05",
     "projet": "WIP",
-    "signes_reels": 10900,
-    "signes_supprimes": 5666,
+    "signes_reels": 15850,
+    "signes_supprimes": 2131,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -233,9 +233,9 @@
   {
     "periode": "2024-05",
     "projet": "tcrouzet",
-    "signes_reels": 69607,
-    "signes_supprimes": 13233,
-    "temps_minutes": 381.28,
+    "signes_reels": 62592,
+    "signes_supprimes": 9930,
+    "temps_minutes": 377.26,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -244,10 +244,10 @@
   {
     "periode": "2024-06",
     "projet": "BornToBike",
-    "signes_reels": 204,
+    "signes_reels": 5657,
     "signes_supprimes": 0,
-    "temps_minutes": 610.87,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -255,8 +255,8 @@
   {
     "periode": "2024-06",
     "projet": "IA",
-    "signes_reels": 0,
-    "signes_supprimes": 14120,
+    "signes_reels": 34963,
+    "signes_supprimes": 11045,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -266,8 +266,8 @@
   {
     "periode": "2024-06",
     "projet": "WIP",
-    "signes_reels": 1748,
-    "signes_supprimes": 3641,
+    "signes_reels": 64931,
+    "signes_supprimes": 2114,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -277,9 +277,9 @@
   {
     "periode": "2024-06",
     "projet": "tcrouzet",
-    "signes_reels": 51969,
-    "signes_supprimes": 12655,
-    "temps_minutes": 271.3,
+    "signes_reels": 42691,
+    "signes_supprimes": 6863,
+    "temps_minutes": 254.28,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -289,8 +289,8 @@
     "periode": "2024-07",
     "projet": "WIP",
     "signes_reels": 20,
-    "signes_supprimes": 124,
-    "temps_minutes": 63.61,
+    "signes_supprimes": 255,
+    "temps_minutes": 18.22,
     "temps_estime": true,
     "dossiers": [
       "WIP"
@@ -299,9 +299,9 @@
   {
     "periode": "2024-07",
     "projet": "tcrouzet",
-    "signes_reels": 13477,
-    "signes_supprimes": 6469,
-    "temps_minutes": 85.5,
+    "signes_reels": 12568,
+    "signes_supprimes": 4947,
+    "temps_minutes": 84.68,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -310,10 +310,10 @@
   {
     "periode": "2024-08",
     "projet": "BornToBike",
-    "signes_reels": 4,
+    "signes_reels": 1070,
     "signes_supprimes": 11,
-    "temps_minutes": 44.92,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -323,8 +323,8 @@
     "projet": "WIP",
     "signes_reels": 170,
     "signes_supprimes": 143,
-    "temps_minutes": null,
-    "temps_estime": false,
+    "temps_minutes": 20.73,
+    "temps_estime": true,
     "dossiers": [
       "WIP"
     ]
@@ -332,9 +332,9 @@
   {
     "periode": "2024-08",
     "projet": "tcrouzet",
-    "signes_reels": 19101,
-    "signes_supprimes": 7590,
-    "temps_minutes": 75.57,
+    "signes_reels": 17067,
+    "signes_supprimes": 3750,
+    "temps_minutes": 65.97,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -343,7 +343,7 @@
   {
     "periode": "2024-09",
     "projet": "BornToBike",
-    "signes_reels": 57,
+    "signes_reels": 14320,
     "signes_supprimes": 192,
     "temps_minutes": null,
     "temps_estime": false,
@@ -354,9 +354,9 @@
   {
     "periode": "2024-09",
     "projet": "tcrouzet",
-    "signes_reels": 49105,
-    "signes_supprimes": 8135,
-    "temps_minutes": 293.23,
+    "signes_reels": 32936,
+    "signes_supprimes": 3064,
+    "temps_minutes": 237.79,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -367,7 +367,7 @@
     "projet": "IA",
     "signes_reels": 2,
     "signes_supprimes": 0,
-    "temps_minutes": 0.03,
+    "temps_minutes": 0.04,
     "temps_estime": true,
     "dossiers": [
       "IA"
@@ -376,8 +376,8 @@
   {
     "periode": "2024-10",
     "projet": "tcrouzet",
-    "signes_reels": 235197,
-    "signes_supprimes": 42900,
+    "signes_reels": 117523,
+    "signes_supprimes": 33461,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -387,10 +387,10 @@
   {
     "periode": "2024-11",
     "projet": "BornToBike",
-    "signes_reels": 423,
+    "signes_reels": 1847,
     "signes_supprimes": 2,
-    "temps_minutes": 1272.64,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -398,9 +398,9 @@
   {
     "periode": "2024-11",
     "projet": "IA",
-    "signes_reels": 4,
+    "signes_reels": 54,
     "signes_supprimes": 0,
-    "temps_minutes": 0.06,
+    "temps_minutes": 1.2,
     "temps_estime": true,
     "dossiers": [
       "IA"
@@ -409,9 +409,9 @@
   {
     "periode": "2024-11",
     "projet": "tcrouzet",
-    "signes_reels": 15770,
-    "signes_supprimes": 705,
-    "temps_minutes": 61.61,
+    "signes_reels": 13907,
+    "signes_supprimes": 873,
+    "temps_minutes": 63.08,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -420,9 +420,9 @@
   {
     "periode": "2024-12",
     "projet": "BornToBike",
-    "signes_reels": 74,
+    "signes_reels": 645,
     "signes_supprimes": 29,
-    "temps_minutes": 239.92,
+    "temps_minutes": 169.15,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -441,9 +441,20 @@
   },
   {
     "periode": "2024-12",
+    "projet": "IA",
+    "signes_reels": 4272,
+    "signes_supprimes": 0,
+    "temps_minutes": null,
+    "temps_estime": false,
+    "dossiers": [
+      "IA"
+    ]
+  },
+  {
+    "periode": "2024-12",
     "projet": "Rush",
-    "signes_reels": 12542,
-    "signes_supprimes": 140870,
+    "signes_reels": 76967,
+    "signes_supprimes": 39553,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -453,10 +464,10 @@
   {
     "periode": "2024-12",
     "projet": "tcrouzet",
-    "signes_reels": 70355,
-    "signes_supprimes": 12213,
-    "temps_minutes": 490.47,
-    "temps_estime": true,
+    "signes_reels": 17828088,
+    "signes_supprimes": 8905,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "tcrouzet"
     ]
@@ -464,8 +475,8 @@
   {
     "periode": "2025-01",
     "projet": "BornToBike",
-    "signes_reels": 0,
-    "signes_supprimes": 3582,
+    "signes_reels": 8553,
+    "signes_supprimes": 2809,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -486,9 +497,9 @@
   {
     "periode": "2025-01",
     "projet": "IA",
-    "signes_reels": 1,
+    "signes_reels": 161,
     "signes_supprimes": 0,
-    "temps_minutes": 0.02,
+    "temps_minutes": 28.26,
     "temps_estime": true,
     "dossiers": [
       "IA"
@@ -497,8 +508,8 @@
   {
     "periode": "2025-01",
     "projet": "Rush",
-    "signes_reels": 132,
-    "signes_supprimes": 169876,
+    "signes_reels": 36220,
+    "signes_supprimes": 22586,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -510,7 +521,7 @@
     "projet": "WIP",
     "signes_reels": 91,
     "signes_supprimes": 0,
-    "temps_minutes": 40.2,
+    "temps_minutes": 6.03,
     "temps_estime": true,
     "dossiers": [
       "WIP"
@@ -519,9 +530,9 @@
   {
     "periode": "2025-01",
     "projet": "tcrouzet",
-    "signes_reels": 141608,
-    "signes_supprimes": 39468,
-    "temps_minutes": 1202.16,
+    "signes_reels": 123755,
+    "signes_supprimes": 27864,
+    "temps_minutes": 1159.93,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -530,10 +541,10 @@
   {
     "periode": "2025-02",
     "projet": "BornToBike",
-    "signes_reels": 1,
+    "signes_reels": 3053,
     "signes_supprimes": 1,
-    "temps_minutes": 2.65,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -541,8 +552,8 @@
   {
     "periode": "2025-02",
     "projet": "Divers",
-    "signes_reels": 21982,
-    "signes_supprimes": 6144,
+    "signes_reels": 16535,
+    "signes_supprimes": 4096,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -562,11 +573,22 @@
   },
   {
     "periode": "2025-02",
+    "projet": "Rush",
+    "signes_reels": 997,
+    "signes_supprimes": 0,
+    "temps_minutes": 81.73,
+    "temps_estime": true,
+    "dossiers": [
+      "Rush/Manuscrit"
+    ]
+  },
+  {
+    "periode": "2025-02",
     "projet": "tcrouzet",
-    "signes_reels": 119567,
-    "signes_supprimes": 41443,
-    "temps_minutes": null,
-    "temps_estime": false,
+    "signes_reels": 99626,
+    "signes_supprimes": 19630,
+    "temps_minutes": 970.93,
+    "temps_estime": true,
     "dossiers": [
       "tcrouzet"
     ]
@@ -574,10 +596,10 @@
   {
     "periode": "2025-03",
     "projet": "BornToBike",
-    "signes_reels": 1,
+    "signes_reels": 3019,
     "signes_supprimes": 0,
-    "temps_minutes": 1.32,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -596,10 +618,10 @@
   {
     "periode": "2025-03",
     "projet": "WIP",
-    "signes_reels": 275,
+    "signes_reels": 3518,
     "signes_supprimes": 2,
-    "temps_minutes": 122.36,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "WIP"
     ]
@@ -607,9 +629,9 @@
   {
     "periode": "2025-03",
     "projet": "tcrouzet",
-    "signes_reels": 111750,
-    "signes_supprimes": 24257,
-    "temps_minutes": 1294.21,
+    "signes_reels": 97462,
+    "signes_supprimes": 20314,
+    "temps_minutes": 1290.98,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -618,9 +640,9 @@
   {
     "periode": "2025-04",
     "projet": "BornToBike",
-    "signes_reels": 33,
+    "signes_reels": 352,
     "signes_supprimes": 3,
-    "temps_minutes": 72.82,
+    "temps_minutes": 59.43,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -629,7 +651,7 @@
   {
     "periode": "2025-04",
     "projet": "Divers",
-    "signes_reels": 34989,
+    "signes_reels": 31650,
     "signes_supprimes": 166,
     "temps_minutes": null,
     "temps_estime": false,
@@ -640,8 +662,8 @@
   {
     "periode": "2025-04",
     "projet": "WIP",
-    "signes_reels": 2040,
-    "signes_supprimes": 2739883,
+    "signes_reels": 2771108,
+    "signes_supprimes": 67197,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -651,9 +673,9 @@
   {
     "periode": "2025-04",
     "projet": "tcrouzet",
-    "signes_reels": 104200,
-    "signes_supprimes": 8507,
-    "temps_minutes": 955.42,
+    "signes_reels": 89161,
+    "signes_supprimes": 7699,
+    "temps_minutes": 940.15,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -662,10 +684,10 @@
   {
     "periode": "2025-05",
     "projet": "BornToBike",
-    "signes_reels": 120,
+    "signes_reels": 1144,
     "signes_supprimes": 0,
-    "temps_minutes": 232.49,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "BornToBike"
     ]
@@ -673,8 +695,8 @@
   {
     "periode": "2025-05",
     "projet": "WIP",
-    "signes_reels": 8490,
-    "signes_supprimes": 16159,
+    "signes_reels": 397835,
+    "signes_supprimes": 11020,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -684,8 +706,8 @@
   {
     "periode": "2025-05",
     "projet": "tcrouzet",
-    "signes_reels": 136921,
-    "signes_supprimes": 10932,
+    "signes_reels": 128360,
+    "signes_supprimes": 7319,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -695,8 +717,8 @@
   {
     "periode": "2025-06",
     "projet": "tcrouzet",
-    "signes_reels": 110218,
-    "signes_supprimes": 28225,
+    "signes_reels": 97357,
+    "signes_supprimes": 23386,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -708,7 +730,7 @@
     "projet": "BornToBike",
     "signes_reels": 271,
     "signes_supprimes": 0,
-    "temps_minutes": 525.03,
+    "temps_minutes": 27.61,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -717,10 +739,10 @@
   {
     "periode": "2025-07",
     "projet": "WIP",
-    "signes_reels": 2057,
-    "signes_supprimes": 5209,
-    "temps_minutes": null,
-    "temps_estime": false,
+    "signes_reels": 28003,
+    "signes_supprimes": 2647,
+    "temps_minutes": 372.05,
+    "temps_estime": true,
     "dossiers": [
       "WIP"
     ]
@@ -728,8 +750,8 @@
   {
     "periode": "2025-07",
     "projet": "tcrouzet",
-    "signes_reels": 146665,
-    "signes_supprimes": 38951,
+    "signes_reels": 113230,
+    "signes_supprimes": 24273,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -739,9 +761,9 @@
   {
     "periode": "2025-08",
     "projet": "BornToBike",
-    "signes_reels": 1,
+    "signes_reels": 916,
     "signes_supprimes": 2,
-    "temps_minutes": 5.81,
+    "temps_minutes": 108.84,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -750,8 +772,8 @@
   {
     "periode": "2025-08",
     "projet": "Isa",
-    "signes_reels": 109393,
-    "signes_supprimes": 89216,
+    "signes_reels": 179842,
+    "signes_supprimes": 30295,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -763,7 +785,7 @@
     "projet": "WIP",
     "signes_reels": 197,
     "signes_supprimes": 0,
-    "temps_minutes": 22.04,
+    "temps_minutes": 2.2,
     "temps_estime": true,
     "dossiers": [
       "WIP"
@@ -772,9 +794,9 @@
   {
     "periode": "2025-08",
     "projet": "tcrouzet",
-    "signes_reels": 107260,
-    "signes_supprimes": 14167,
-    "temps_minutes": 1406.27,
+    "signes_reels": 99158,
+    "signes_supprimes": 10847,
+    "temps_minutes": 1449.86,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -783,8 +805,8 @@
   {
     "periode": "2025-09",
     "projet": "BornToBike",
-    "signes_reels": 13,
-    "signes_supprimes": 1974,
+    "signes_reels": 2079,
+    "signes_supprimes": 445,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -794,10 +816,10 @@
   {
     "periode": "2025-09",
     "projet": "IA",
-    "signes_reels": 0,
+    "signes_reels": 16898,
     "signes_supprimes": 1049,
-    "temps_minutes": 16.01,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "IA"
     ]
@@ -805,8 +827,8 @@
   {
     "periode": "2025-09",
     "projet": "Isa",
-    "signes_reels": 388,
-    "signes_supprimes": 140851,
+    "signes_reels": 66698,
+    "signes_supprimes": 15020,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -827,8 +849,8 @@
   {
     "periode": "2025-09",
     "projet": "Rush",
-    "signes_reels": 33,
-    "signes_supprimes": 444519,
+    "signes_reels": 18321,
+    "signes_supprimes": 16329,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -838,8 +860,8 @@
   {
     "periode": "2025-09",
     "projet": "tcrouzet",
-    "signes_reels": 106657,
-    "signes_supprimes": 33374,
+    "signes_reels": 93037,
+    "signes_supprimes": 18990,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -851,7 +873,7 @@
     "projet": "BornToBike",
     "signes_reels": 3,
     "signes_supprimes": 3,
-    "temps_minutes": 11.62,
+    "temps_minutes": 0.65,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -860,9 +882,9 @@
   {
     "periode": "2025-10",
     "projet": "IA",
-    "signes_reels": 2,
-    "signes_supprimes": 79,
-    "temps_minutes": 1.24,
+    "signes_reels": 5172,
+    "signes_supprimes": 5,
+    "temps_minutes": 132.06,
     "temps_estime": true,
     "dossiers": [
       "IA"
@@ -882,9 +904,9 @@
   {
     "periode": "2025-10",
     "projet": "Rush",
-    "signes_reels": 2,
-    "signes_supprimes": 271,
-    "temps_minutes": 11.0,
+    "signes_reels": 704,
+    "signes_supprimes": 156,
+    "temps_minutes": 77.56,
     "temps_estime": true,
     "dossiers": [
       "Archives/Rush/manuscrit",
@@ -894,8 +916,8 @@
   {
     "periode": "2025-10",
     "projet": "tcrouzet",
-    "signes_reels": 116750,
-    "signes_supprimes": 37059,
+    "signes_reels": 99005,
+    "signes_supprimes": 23997,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -916,10 +938,10 @@
   {
     "periode": "2025-11",
     "projet": "IA",
-    "signes_reels": 3,
+    "signes_reels": 12695,
     "signes_supprimes": 102,
-    "temps_minutes": 90.24,
-    "temps_estime": true,
+    "temps_minutes": null,
+    "temps_estime": false,
     "dossiers": [
       "IA"
     ]
@@ -929,7 +951,7 @@
     "projet": "Rush",
     "signes_reels": 40,
     "signes_supprimes": 56,
-    "temps_minutes": 3.87,
+    "temps_minutes": 8.66,
     "temps_estime": true,
     "dossiers": [
       "Archives/Rush/manuscrit"
@@ -938,8 +960,8 @@
   {
     "periode": "2025-11",
     "projet": "WIP",
-    "signes_reels": 1939,
-    "signes_supprimes": 4027,
+    "signes_reels": 125677,
+    "signes_supprimes": 2820,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -949,8 +971,8 @@
   {
     "periode": "2025-11",
     "projet": "tcrouzet",
-    "signes_reels": 186151,
-    "signes_supprimes": 52142,
+    "signes_reels": 162728,
+    "signes_supprimes": 37743,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -962,7 +984,7 @@
     "projet": "Rush",
     "signes_reels": 58,
     "signes_supprimes": 22,
-    "temps_minutes": 3.22,
+    "temps_minutes": 7.22,
     "temps_estime": true,
     "dossiers": [
       "Archives/Rush/manuscrit"
@@ -971,8 +993,8 @@
   {
     "periode": "2025-12",
     "projet": "WIP",
-    "signes_reels": 5782,
-    "signes_supprimes": 66699,
+    "signes_reels": 160425,
+    "signes_supprimes": 50327,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -982,8 +1004,8 @@
   {
     "periode": "2025-12",
     "projet": "iT",
-    "signes_reels": 82881,
-    "signes_supprimes": 184530,
+    "signes_reels": 342515,
+    "signes_supprimes": 72655,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -993,8 +1015,8 @@
   {
     "periode": "2025-12",
     "projet": "tcrouzet",
-    "signes_reels": 122506,
-    "signes_supprimes": 28522,
+    "signes_reels": 110502,
+    "signes_supprimes": 19264,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1006,7 +1028,7 @@
     "projet": "BornToBike",
     "signes_reels": 1,
     "signes_supprimes": 0,
-    "temps_minutes": 1.94,
+    "temps_minutes": 0.11,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -1014,10 +1036,21 @@
   },
   {
     "periode": "2026-01",
+    "projet": "Divers",
+    "signes_reels": 1918,
+    "signes_supprimes": 0,
+    "temps_minutes": null,
+    "temps_estime": false,
+    "dossiers": [
+      "Divers"
+    ]
+  },
+  {
+    "periode": "2026-01",
     "projet": "WIP",
-    "signes_reels": 6331,
-    "signes_supprimes": 719,
-    "temps_minutes": 761.29,
+    "signes_reels": 13204,
+    "signes_supprimes": 22,
+    "temps_minutes": 172.19,
     "temps_estime": true,
     "dossiers": [
       "WIP"
@@ -1026,8 +1059,8 @@
   {
     "periode": "2026-01",
     "projet": "iT",
-    "signes_reels": 39532,
-    "signes_supprimes": 136690,
+    "signes_reels": 242398,
+    "signes_supprimes": 66225,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1037,9 +1070,9 @@
   {
     "periode": "2026-01",
     "projet": "tcrouzet",
-    "signes_reels": 55670,
-    "signes_supprimes": 7297,
-    "temps_minutes": 947.4,
+    "signes_reels": 51381,
+    "signes_supprimes": 5489,
+    "temps_minutes": 986.94,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -1048,10 +1081,10 @@
   {
     "periode": "2026-02",
     "projet": "WIP",
-    "signes_reels": 29194,
-    "signes_supprimes": 2673,
-    "temps_minutes": null,
-    "temps_estime": false,
+    "signes_reels": 62858,
+    "signes_supprimes": 1047,
+    "temps_minutes": 1270.38,
+    "temps_estime": true,
     "dossiers": [
       "WIP"
     ]
@@ -1059,7 +1092,7 @@
   {
     "periode": "2026-02",
     "projet": "tcrouzet",
-    "signes_reels": 35740,
+    "signes_reels": 31783,
     "signes_supprimes": 36,
     "temps_minutes": null,
     "temps_estime": false,
@@ -1072,7 +1105,7 @@
     "projet": "Carnets",
     "signes_reels": 5,
     "signes_supprimes": 0,
-    "temps_minutes": 1.94,
+    "temps_minutes": 1.31,
     "temps_estime": true,
     "dossiers": [
       "Carnets"
@@ -1081,9 +1114,9 @@
   {
     "periode": "2026-03",
     "projet": "WIP",
-    "signes_reels": 271,
+    "signes_reels": 6470,
     "signes_supprimes": 69,
-    "temps_minutes": 34.21,
+    "temps_minutes": 116.03,
     "temps_estime": true,
     "dossiers": [
       "WIP"
@@ -1092,8 +1125,8 @@
   {
     "periode": "2026-03",
     "projet": "tcrouzet",
-    "signes_reels": 238578,
-    "signes_supprimes": 87259,
+    "signes_reels": 198962,
+    "signes_supprimes": 37618,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1103,12 +1136,13 @@
   {
     "periode": "2026-04",
     "projet": "Isa",
-    "signes_reels": 145,
-    "signes_supprimes": 41976,
+    "signes_reels": 89039,
+    "signes_supprimes": 12908,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
       "Isa/Maison",
+      "Isa/archives/manuscritV1",
       "Isa/manuscrit",
       "Zone/manuscrit"
     ]
@@ -1116,9 +1150,9 @@
   {
     "periode": "2026-04",
     "projet": "iT",
-    "signes_reels": 318,
-    "signes_supprimes": 1472,
-    "temps_minutes": 69.07,
+    "signes_reels": 181,
+    "signes_supprimes": 472,
+    "temps_minutes": 32.6,
     "temps_estime": true,
     "dossiers": [
       "iT"
@@ -1127,8 +1161,8 @@
   {
     "periode": "2026-04",
     "projet": "tcrouzet",
-    "signes_reels": 157198,
-    "signes_supprimes": 36796,
+    "signes_reels": 134310,
+    "signes_supprimes": 21658,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1138,10 +1172,10 @@
   {
     "periode": "2026-05",
     "projet": "BornToBike",
-    "signes_reels": 50,
-    "signes_supprimes": 314,
-    "temps_minutes": null,
-    "temps_estime": false,
+    "signes_reels": 474,
+    "signes_supprimes": 38,
+    "temps_minutes": 55.66,
+    "temps_estime": true,
     "dossiers": [
       "BornToBike"
     ]
@@ -1149,8 +1183,8 @@
   {
     "periode": "2026-05",
     "projet": "Isa",
-    "signes_reels": 1169,
-    "signes_supprimes": 28143,
+    "signes_reels": 86479,
+    "signes_supprimes": 12977,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1160,8 +1194,8 @@
   {
     "periode": "2026-05",
     "projet": "tcrouzet",
-    "signes_reels": 92514,
-    "signes_supprimes": 22237,
+    "signes_reels": 83411,
+    "signes_supprimes": 14807,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1171,9 +1205,9 @@
   {
     "periode": "2026-06",
     "projet": "BornToBike",
-    "signes_reels": 0,
+    "signes_reels": 1959,
     "signes_supprimes": 10,
-    "temps_minutes": 19.37,
+    "temps_minutes": 214.13,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -1182,8 +1216,8 @@
   {
     "periode": "2026-06",
     "projet": "Isa",
-    "signes_reels": 1202,
-    "signes_supprimes": 148461,
+    "signes_reels": 137495,
+    "signes_supprimes": 46642,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1194,8 +1228,8 @@
   {
     "periode": "2026-06",
     "projet": "tcrouzet",
-    "signes_reels": 45020,
-    "signes_supprimes": 5414,
+    "signes_reels": 40904,
+    "signes_supprimes": 4714,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1205,7 +1239,7 @@
   {
     "periode": "2026-07",
     "projet": "727",
-    "signes_reels": 123949,
+    "signes_reels": 94724,
     "signes_supprimes": 0,
     "temps_minutes": null,
     "temps_estime": false,
@@ -1216,9 +1250,9 @@
   {
     "periode": "2026-07",
     "projet": "BornToBike",
-    "signes_reels": 326,
+    "signes_reels": 18800,
     "signes_supprimes": 1,
-    "temps_minutes": 633.5,
+    "temps_minutes": 2043.92,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -1227,9 +1261,9 @@
   {
     "periode": "2026-07",
     "projet": "Isa",
-    "signes_reels": 273,
-    "signes_supprimes": 25527,
-    "temps_minutes": 4493.29,
+    "signes_reels": 18563,
+    "signes_supprimes": 7111,
+    "temps_minutes": 2850.64,
     "temps_estime": true,
     "dossiers": [
       "Isa/manuscrit"
@@ -1238,9 +1272,9 @@
   {
     "periode": "2026-07",
     "projet": "tcrouzet",
-    "signes_reels": 61714,
-    "signes_supprimes": 5945,
-    "temps_minutes": 1102.95,
+    "signes_reels": 56639,
+    "signes_supprimes": 3459,
+    "temps_minutes": 1139.41,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -1249,8 +1283,8 @@
   {
     "periode": "2026-08",
     "projet": "727",
-    "signes_reels": 56662,
-    "signes_supprimes": 3264,
+    "signes_reels": 44848,
+    "signes_supprimes": 3239,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1262,7 +1296,7 @@
     "projet": "BornToBike",
     "signes_reels": 149,
     "signes_supprimes": 0,
-    "temps_minutes": 288.64,
+    "temps_minutes": 16.28,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -1270,10 +1304,21 @@
   },
   {
     "periode": "2026-08",
+    "projet": "IA",
+    "signes_reels": 9843,
+    "signes_supprimes": 0,
+    "temps_minutes": 375.1,
+    "temps_estime": true,
+    "dossiers": [
+      "IA"
+    ]
+  },
+  {
+    "periode": "2026-08",
     "projet": "Isa",
     "signes_reels": 110,
     "signes_supprimes": 20,
-    "temps_minutes": 22.34,
+    "temps_minutes": 14.24,
     "temps_estime": true,
     "dossiers": [
       "Isa/manuscrit"
@@ -1282,9 +1327,9 @@
   {
     "periode": "2026-08",
     "projet": "tcrouzet",
-    "signes_reels": 137844,
-    "signes_supprimes": 6281,
-    "temps_minutes": 2349.45,
+    "signes_reels": 128456,
+    "signes_supprimes": 5598,
+    "temps_minutes": 2541.54,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"
@@ -1293,8 +1338,8 @@
   {
     "periode": "2026-09",
     "projet": "727",
-    "signes_reels": 248,
-    "signes_supprimes": 199,
+    "signes_reels": 478,
+    "signes_supprimes": 11,
     "temps_minutes": null,
     "temps_estime": false,
     "dossiers": [
@@ -1306,7 +1351,7 @@
     "projet": "BornToBike",
     "signes_reels": 116,
     "signes_supprimes": 0,
-    "temps_minutes": 224.73,
+    "temps_minutes": 12.6,
     "temps_estime": true,
     "dossiers": [
       "BornToBike"
@@ -1315,9 +1360,9 @@
   {
     "periode": "2026-09",
     "projet": "Isa",
-    "signes_reels": 0,
-    "signes_supprimes": 7346,
-    "temps_minutes": 1279.34,
+    "signes_reels": 40167,
+    "signes_supprimes": 2220,
+    "temps_minutes": 4706.07,
     "temps_estime": true,
     "dossiers": [
       "Isa/manuscrit"
@@ -1326,9 +1371,9 @@
   {
     "periode": "2026-09",
     "projet": "tcrouzet",
-    "signes_reels": 24524,
-    "signes_supprimes": 9003,
-    "temps_minutes": 546.58,
+    "signes_reels": 22058,
+    "signes_supprimes": 6724,
+    "temps_minutes": 545.67,
     "temps_estime": true,
     "dossiers": [
       "tcrouzet"

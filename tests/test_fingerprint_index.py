@@ -37,7 +37,8 @@ class FingerprintIndexTest(unittest.TestCase):
                     hashes,
                     [],
                 )
-                index.commit("commit-1")
+                index.record_processed_commit("commit-1", "2026-01-01T10:00:00+01:00")
+                index.commit()
                 index.update_file_delta(
                     "Alpha/manuscrit/source.md",
                     None,
@@ -46,7 +47,8 @@ class FingerprintIndexTest(unittest.TestCase):
                     [],
                     [],
                 )
-                index.commit("commit-2")
+                index.record_processed_commit("commit-2", "2026-01-01T10:15:00+01:00")
+                index.commit()
                 statements: list[str] = []
                 index.connection.set_trace_callback(statements.append)
                 known, sources = index.original_sources(hashes)
@@ -73,6 +75,13 @@ class FingerprintIndexTest(unittest.TestCase):
                 removed = database.execute(
                     "SELECT COUNT(*) FROM fingerprints WHERE removed_at_commit = 'commit-2'"
                 ).fetchone()[0]
+                commits = database.execute(
+                    "SELECT commit_hash FROM commits ORDER BY rowid"
+                ).fetchall()
+                origins = database.execute(
+                    "SELECT COUNT(*), COUNT(DISTINCT hash), MIN(first_commit_hash) "
+                    "FROM fingerprint_origins"
+                ).fetchone()
                 query_plan = " ".join(
                     str(column)
                     for row in database.execute(
@@ -93,6 +102,9 @@ class FingerprintIndexTest(unittest.TestCase):
             self.assertIn("idx_hash", indexes)
             self.assertIn("idx_hash", query_plan)
             self.assertGreater(removed, 0)
+            self.assertEqual(commits, [("commit-1",), ("commit-2",)])
+            self.assertEqual(origins[0], origins[1])
+            self.assertEqual(origins[2], "commit-1")
 
 
 if __name__ == "__main__":

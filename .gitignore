@@ -1,7 +1,8 @@
 .venv/
 .venv-web/
-__pycache__/
+_*
 *.py[cod]
 .DS_Store
 .cache/
 site/data/state.json
+site/data/duplications.json

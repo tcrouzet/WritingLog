@@ -38,6 +38,18 @@ class CacheHistoryTest(unittest.TestCase):
 
             second = subprocess.run([*command, "update"], text=True, capture_output=True, check=True)
             self.assertIn("Synchronisation du miroir", second.stdout)
+            self.assertIn("Aucun nouveau commit", second.stdout)
+            self.assertIn("HEAD du miroir inchangé", second.stdout)
+
+            (source / "note.md").write_text("deuxième version", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "add", "note.md"], check=True)
+            env.update({"GIT_AUTHOR_DATE": "2026-01-01T10:15:00+01:00", "GIT_COMMITTER_DATE": "2026-01-01T10:15:00+01:00"})
+            subprocess.run(["git", "-C", str(source), "commit", "-q", "-m", "second"], check=True, env=env)
+            updated = subprocess.run([*command, "update"], text=True, capture_output=True, check=True)
+            self.assertIn("Nouveaux commits récupérés : 1", updated.stdout)
+            self.assertIn("second", updated.stdout)
+            self.assertIn("HEAD du miroir :", updated.stdout)
+
             marker = root / ".cache/history.git/old-cache-marker"
             marker.write_text("ancien", encoding="utf-8")
             rebuilt = subprocess.run(command, text=True, capture_output=True, check=True)
@@ -49,7 +61,7 @@ class CacheHistoryTest(unittest.TestCase):
                 capture_output=True,
                 check=True,
             ).stdout.strip()
-            self.assertEqual(count, "1")
+            self.assertEqual(count, "2")
 
 
 if __name__ == "__main__":

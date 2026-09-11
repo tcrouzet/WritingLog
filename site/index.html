@@ -8,7 +8,7 @@
   <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css?v=4">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-  <script src="dashboard.js?v=6" defer></script>
+  <script src="dashboard.js?v=7" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -32,23 +32,19 @@
 
     <section class="chart-grid">
       <article class="panel wide">
-        <header><h2>Signes ajoutés et supprimés</h2><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><select class="chart-range" data-chart="daily" aria-label="Période du graphique de production"><option value="30d" selected>30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <header><div><h2>Production</h2><p>Texte nouveau · copies et déplacements exclus par l’analyse</p></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><select class="chart-range" data-chart="daily" aria-label="Période du graphique de production"><option value="30d" selected>30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="canvas-wrap"><canvas id="daily-chart"></canvas></div>
-      </article>
-      <article class="panel wide">
-        <header><div><h2>Rythme quotidien</h2><p>Temps disponible et signes ajoutés ou supprimés par heure</p></div><div class="chart-actions"><select class="chart-range" data-chart="productivity" aria-label="Période du rythme quotidien"><option value="30d" selected>30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
-        <div class="canvas-wrap"><canvas id="productivity-chart"></canvas></div>
       </article>
       <article class="panel wide" id="time-panel">
         <header><h2>Temps passé par projet</h2><div class="chart-actions"><select class="chart-range" data-chart="time" aria-label="Période du temps passé"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y" selected>1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="canvas-wrap"><canvas id="time-chart"></canvas></div>
       </article>
       <article class="panel wide">
-        <header><div><h2>Production cumulée</h2><p>Écriture réelle uniquement · imports exclus</p></div><div class="chart-actions"><select class="chart-range" data-chart="size" aria-label="Période de la production cumulée"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all" selected>Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <header><div><h2>Taille</h2><p>Taille logique du manuscrit · compilations et doublons exclus</p></div><div class="chart-actions"><select class="chart-range" data-chart="size" aria-label="Période de la taille du manuscrit"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all" selected>Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="canvas-wrap tall"><canvas id="size-chart"></canvas></div>
       </article>
     </section>
   </main>
-  <footer>Les signes réels excluent les imports détectés par le seuil configuré.</footer>
+  <footer>Le dashboard affiche les JSON générés par l’analyse sans reclasser les données.</footer>
 </body>
 </html>
