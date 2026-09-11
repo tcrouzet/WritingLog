@@ -20,6 +20,7 @@ from analyze_vault import (
     aggregate,
     character_changes,
     classification_blocks,
+    load_state,
 )
 
 
@@ -177,13 +178,15 @@ output_dir: site
         old_folder.mkdir(parents=True)
         passage = " ".join(f"mot{index}" for index in range(80))
         old_file = old_folder / "chapitre.md"
+        old_file.write_text(passage[:100], encoding="utf-8")
+        self.commit("start in old location", "2026-01-01T10:00:00+01:00")
         old_file.write_text(passage, encoding="utf-8")
-        self.commit("write in old location", "2026-01-01T10:00:00+01:00")
+        self.commit("write in old location", "2026-01-02T10:00:00+01:00")
 
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir()
         old_file.rename(manuscript / "chapitre.md")
-        self.commit("move into current location", "2026-01-02T10:15:00+01:00")
+        self.commit("move into current location", "2026-01-03T10:15:00+01:00")
 
         self.analyze("full")
         projects = {item["id"]: item for item in self.load("projects.json")}
@@ -194,7 +197,23 @@ output_dir: site
             for row in self.load("size_evolution.json")
             if row["projet"] == "Alpha"
         ]
-        self.assertEqual(curve, [len(passage), len(passage)])
+        self.assertEqual(curve, [100, len(passage), len(passage)])
+
+    def test_legacy_size_state_migrates_to_the_historical_mapping(self) -> None:
+        state_path = self.root / "legacy-state.json"
+        state_path.write_text(
+            json.dumps({
+                "config_fingerprint": "same",
+                "project_sizes": {"Alpha": 100},
+                "historical_project_sizes": {"Alpha": 125000},
+            }),
+            encoding="utf-8",
+        )
+
+        state = load_state(state_path, "same", False, {})
+
+        self.assertEqual(state["project_sizes"], {"Alpha": 125000})
+        self.assertNotIn("historical_project_sizes", state)
 
     def test_word_edit_counts_only_the_changed_characters(self) -> None:
         source = "un deux trois quatre cinq six sept huit neuf dix onze douze treize quatorze"

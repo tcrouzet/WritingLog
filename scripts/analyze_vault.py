@@ -483,7 +483,6 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "last_commit": None,
         "files": {},
         "project_sizes": {},
-        "historical_project_sizes": {},
         "events": [],
         "size_points": [],
         "archive_moves": {},
@@ -508,6 +507,12 @@ def load_state(
     # reprise incrémentale et disparaît à la prochaine écriture.
     state.pop("version", None)
     state.pop("excluded_sizes", None)
+    # Les états produits avant l'unification conservaient deux compteurs. Le
+    # compteur historique est le seul qui ait toujours utilisé tous les chemins
+    # configurés : il devient donc directement project_sizes à la migration.
+    historical_sizes = state.pop("historical_project_sizes", None)
+    if isinstance(historical_sizes, dict):
+        state["project_sizes"] = historical_sizes
     if state.get("config_fingerprint") != fingerprint:
         raise ValueError("La configuration d'analyse a changé ; relancez avec --full-rebuild.")
     return state
@@ -565,14 +570,12 @@ def process_history_diff(
         for ext in config["file_extensions"]
     }
     excluded = {str(folder).strip("/").casefold() for folder in config["excluded_folders"]}
-    current_paths = configured_project_paths(metadata, include_history=False)
     history_paths = configured_project_paths(metadata, include_history=True)
     gram_chars = int(config["internal_detection"]["gram_chars"])
     selection_chars = int(config["internal_detection"]["selection_chars"])
     overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
     files = state["files"]
     project_sizes = state["project_sizes"]
-    historical_project_sizes = state["historical_project_sizes"]
     events = state["events"]
     size_points = state["size_points"]
     archive_moves = state["archive_moves"]
@@ -625,7 +628,7 @@ def process_history_diff(
             absolute_index = start + relative_index
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
-            touched_historical_sizes: set[str] = set()
+            touched_sizes: set[str] = set()
             change_records: list[dict[str, Any]] = []
             commit_added_hashes: list[str] = []
 
@@ -646,8 +649,6 @@ def process_history_diff(
                     continue
                 old_text = blobs.text(f"{commit.sha}^", old_path) or "" if old_md and old_path else ""
                 new_text = blobs.text(commit.sha, new_path) or "" if new_md and new_path else ""
-                old_current = project_for(old_path, extensions, excluded, current_paths)
-                new_current = project_for(new_path, extensions, excluded, current_paths)
                 old_project = project_for(old_path, extensions, excluded, history_paths)
                 new_project = project_for(new_path, extensions, excluded, history_paths)
                 old_folder = tracked_folder_for(old_path, old_project, history_paths)
@@ -657,29 +658,22 @@ def process_history_diff(
                 if new_project and new_folder:
                     work[new_project]["folders"].add(new_folder)
 
-                if old_current and change.status != "C":
-                    project_sizes[old_current] = max(0, int(project_sizes.get(old_current, 0)) - len(old_text))
+                if old_project and change.status != "C":
+                    project_sizes[old_project] = max(
+                        0,
+                        int(project_sizes.get(old_project, 0)) - len(old_text),
+                    )
+                    touched_sizes.add(old_project)
                     if old_path:
                         files.pop(path_key(old_path), None)
-                if new_current:
-                    project_sizes[new_current] = int(project_sizes.get(new_current, 0)) + len(new_text)
+                if new_project:
+                    project_sizes[new_project] = int(project_sizes.get(new_project, 0)) + len(new_text)
                     files[path_key(new_path)] = {
                         "size": len(new_text),
-                        "project": new_current,
+                        "project": new_project,
                         "last_timestamp": commit.timestamp,
                     }
-
-                if old_project and change.status != "C":
-                    historical_project_sizes[old_project] = max(
-                        0,
-                        int(historical_project_sizes.get(old_project, 0)) - len(old_text),
-                    )
-                    touched_historical_sizes.add(old_project)
-                if new_project:
-                    historical_project_sizes[new_project] = (
-                        int(historical_project_sizes.get(new_project, 0)) + len(new_text)
-                    )
-                    touched_historical_sizes.add(new_project)
+                    touched_sizes.add(new_project)
 
                 if change.status == "A":
                     added_parts, removed_parts = ([new_text] if new_text else []), []
@@ -951,14 +945,14 @@ def process_history_diff(
 
             if work:
                 relevant_commits += 1
-            for project in sorted(touched_historical_sizes):
+            for project in sorted(touched_sizes):
                 size_points.append({
                     "timestamp": commit.timestamp,
                     "commit": commit.sha,
                     "project": project,
                     "size": max(
                         0,
-                        int(historical_project_sizes.get(project, 0))
+                        int(project_sizes.get(project, 0))
                         - active_excluded_size(project),
                     ),
                 })

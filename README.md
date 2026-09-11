@@ -10,7 +10,7 @@ Writing Log reste un prototype : Git ne contient pas assez d’information pour 
 
 Pour chaque commit, Git fournit deux instantanés du texte et leur date d’enregistrement. Il ne fournit ni la date de frappe des passages, ni leur provenance, ni la durée de travail, ni la distinction entre écriture, collage, déplacement et génération d’un fichier de compilation. Une addition de 25 000 signes dans un diff reste donc seulement une addition de 25 000 signes entre deux instantanés.
 
-La taille du projet au dernier commit est directement observable, à condition que `folder` désigne exactement son emplacement. En revanche, les métriques historiques produites par l’analyse sont des inférences.
+La taille du projet au dernier commit est directement observable, à condition que `folder` et `history_folders` décrivent tous ses emplacements. En revanche, les métriques historiques produites par l’analyse sont des inférences.
 
 ### Pourquoi la méthode précédente échouait
 
@@ -92,7 +92,7 @@ mon-roman:
   objectif_signes: 500000
 ```
 
-`title` est affiché dans le dashboard. `folder` est le chemin complet du dossier actuellement suivi depuis la racine du vault. `history_folders` liste ses anciens chemins : ils servent à retrouver la production et les sessions passées, mais jamais à calculer la taille actuelle. Une définition explicite prime sur `excluded_folders` : `folder: "Archives/Rush/manuscrit"` suit donc Rush sous Archives. Tous les autres champs sont transmis sans modification à `projects.json`.
+`title` est affiché dans le dashboard. `folder` est le chemin complet du dossier actuellement suivi depuis la racine du vault. `history_folders` liste ses anciens chemins. Le même mapping complet sert à la classification, à la courbe historique et à la taille actuelle : un fichier explicitement rattaché au projet reste donc suivi sous chacun de ces chemins. Une définition explicite prime sur `excluded_folders` : `folder: "Archives/Rush/manuscrit"` suit donc Rush sous Archives. Tous les autres champs sont transmis sans modification à `projects.json`.
 
 Les projets qui n’existent plus à la racine du vault — notamment ceux déplacés dans un dossier exclu comme `Archives` — sont recensés dans `projets_archives.yml`. Ils redeviennent visibles et suivis dès que leur bloc est copié dans `projet.yml`.
 
@@ -181,7 +181,7 @@ Les événements classés alimentent ensuite :
 - les productions quotidiennes, hebdomadaires et mensuelles ;
 - les signes supprimés pendant le travail éditorial, affichés sous l’axe zéro ;
 - la production cumulée, qui additionne uniquement l’écriture réelle ;
-- la taille logique actuelle du chemin `folder`, compilations et doublons exclus.
+- la taille logique actuelle de tous les chemins configurés dans `folder` et `history_folders`, compilations et doublons exclus.
 
 La production cumulée et la taille actuelle sont volontairement différentes : la première mesure les caractères classés comme écrits au fil de l’historique, tandis que la seconde mesure le contenu unique du manuscrit aujourd’hui, sans ses assemblages temporaires.
 
