@@ -7,6 +7,10 @@ Isa:
   folder: "Isa/manuscrit"
   history_folders:
     - "Zone/manuscrit"
+    - "Zone/manuscritV1"
+    - "Zone/manuscritv2"
+    - "Zone/Maison"
+    - "Zone/archives/manuscritV1"
     - "Isa/Maison"
     - "Isa/archives/manuscritV1"
 

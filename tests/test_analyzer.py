@@ -40,8 +40,6 @@ internal_detection:
   gram_chars: 36
   selection_chars: 180
   overlap_threshold: 0.85
-session:
-  timeout_minutes: 45
 output_dir: site
 """,
             encoding="utf-8",
@@ -116,7 +114,7 @@ output_dir: site
         self.assertEqual(projects["Alpha"]["taille_actuelle"], 10)
         self.assertEqual(projects["Alpha"]["genre"], "roman")
         self.assertEqual(projects["Alpha"]["date_debut"], "2025-01-10")
-        self.assertIsNone(projects["Alpha"]["temps_minutes_total"])
+        self.assertNotIn("temps_minutes_total", projects["Alpha"])
         self.assertNotIn("Beta", projects)
         self.assertNotIn("Journal", projects)
         alpha_curve = [row for row in self.load("size_evolution.json") if row["projet"] == "Alpha"]
@@ -139,7 +137,7 @@ output_dir: site
         projects = {item["id"]: item for item in self.load("projects.json")}
         self.assertEqual(projects["Beta"]["signes_reels_total"], len(duplicated_text))
         self.assertEqual(projects["Beta"]["taille_actuelle"], len(duplicated_text))
-        self.assertIsNone(projects["Beta"]["temps_minutes_total"])
+        self.assertNotIn("temps_minutes_total", projects["Beta"])
 
         reused = manuscript / "reused.md"
         reused.write_text(duplicated_text, encoding="utf-8")
@@ -216,7 +214,7 @@ output_dir: site
         self.assertEqual(sum(map(len, added)), len("AJOUT") + len("CORRECTION"))
         self.assertEqual(sum(map(len, removed)), 2 * len("texte"))
 
-    def test_sparse_commits_without_observed_project_rate_have_unknown_time(self) -> None:
+    def test_sparse_commits_are_distributed_without_tracking_time(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
         long_file = manuscript / "long.md"
@@ -229,9 +227,10 @@ output_dir: site
         self.analyze("full")
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
         self.assertEqual(project["signes_reels_total"], 6001)
-        self.assertIsNone(project["temps_minutes_total"])
+        self.assertNotIn("temps_minutes_total", project)
+        self.assertTrue(all("temps_minutes" not in row for row in self.load("daily.json")))
 
-    def test_sparse_commit_uses_only_previously_observed_project_rate(self) -> None:
+    def test_sparse_commit_keeps_folders_without_time_fields(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
         note = manuscript / "chapter.md"
@@ -249,13 +248,11 @@ output_dir: site
             for row in self.load("daily.json")
             if row["projet"] == "Alpha"
         }
-        # 400 signes en 10 minutes donnent la seule vitesse observée :
-        # les 1 200 signes suivants correspondent donc à 30 minutes estimées.
-        self.assertEqual(rows["2026-01-03"]["temps_minutes"], 15)
-        self.assertTrue(rows["2026-01-03"]["temps_estime"])
+        self.assertNotIn("temps_minutes", rows["2026-01-03"])
+        self.assertNotIn("temps_estime", rows["2026-01-03"])
         self.assertEqual(rows["2026-01-03"]["dossiers"], ["Alpha/manuscrit"])
 
-    def test_commit_rate_never_reclassifies_new_text_as_import(self) -> None:
+    def test_commit_spacing_never_reclassifies_new_text_as_import(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
         note = manuscript / "chapter.md"
@@ -272,9 +269,9 @@ output_dir: site
         event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
         self.assertEqual(event["real_chars"], 2000)
         self.assertEqual(event["import_chars"], 0)
-        self.assertIsNone(event["rate_percentile_threshold"])
+        self.assertNotIn("rate_chars_per_minute", event)
 
-    def test_filled_new_file_uses_project_time_gap_instead_of_forced_import(self) -> None:
+    def test_filled_new_file_remains_production_across_a_commit_gap(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
         (manuscript / "start.md").write_text("début", encoding="utf-8")
@@ -501,6 +498,39 @@ output_dir: site
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
         self.assertEqual(project["signes_supprimes_total"], 0)
 
+    def test_past_occurrence_in_another_file_excludes_a_later_deletion(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        passage = self.text(1200, seed=45)
+        first = manuscript / "first.md"
+        second = manuscript / "second.md"
+        first.write_text(passage, encoding="utf-8")
+        self.commit("first occurrence", "2026-01-01T10:00:00+01:00")
+        second.write_text(passage, encoding="utf-8")
+        self.commit("copied elsewhere", "2026-01-01T10:15:00+01:00")
+        second.unlink()
+        self.commit("old copy disappears", "2026-01-01T10:30:00+01:00")
+        first.write_text("", encoding="utf-8")
+        self.commit("original disappears later", "2026-01-01T10:45:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertEqual(project["signes_supprimes_total"], 0)
+
+    def test_source_file_history_does_not_hide_a_true_deletion(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        passage = self.text(1200, seed=46)
+        source = manuscript / "chapter.md"
+        source.write_text(passage, encoding="utf-8")
+        self.commit("original passage", "2026-01-01T10:00:00+01:00")
+        source.write_text("", encoding="utf-8")
+        self.commit("true deletion", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
+        self.assertGreater(project["signes_supprimes_total"], 0)
+
     def test_size_evolution_is_physical_and_can_decrease(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
@@ -540,7 +570,7 @@ output_dir: site
         }
         error = io.StringIO()
         with redirect_stderr(error):
-            aggregate(state, {"session": {"timeout_minutes": 45}}, {"Alpha": {}})
+            aggregate(state, {}, {"Alpha": {}})
         self.assertIn("Avertissement : Alpha", error.getvalue())
 
     def test_edited_move_reuses_index_and_keeps_new_delta_as_production(self) -> None:

@@ -14,8 +14,5 @@ internal_detection:
   selection_chars: 180
   overlap_threshold: 0.85
 
-session:
-  timeout_minutes: 45
-
 output_dir: "site"
 archived_projects_file: "projets_archives.yml"

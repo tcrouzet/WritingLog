@@ -1,10 +1,9 @@
 {
-  "temps_minutes_total": null,
-  "signes_reels_total": 32601658,
-  "signes_supprimes_total": 2014573,
+  "signes_reels_total": 32636808,
+  "signes_supprimes_total": 2016084,
   "nombre_projets": 13,
   "projet_plus_actif_30_jours": "tcrouzet",
   "projet_plus_actif_30_jours_titre": "tcrouzet",
-  "derniere_mise_a_jour": "2026-09-11T10:41:02+02:00",
+  "derniere_mise_a_jour": "2026-09-11T14:12:42+02:00",
   "dernier_commit": "8b277128718dc6e4d439068382be352fb7342d3a"
 }

@@ -444,7 +444,6 @@ def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
         "excluded_folders": config["excluded_folders"],
         "file_extensions": config["file_extensions"],
         "internal_detection": config["internal_detection"],
-        "session": config["session"],
         "project_paths": configured_project_paths(metadata),
     }
     raw = json.dumps(relevant, sort_keys=True, separators=(",", ":")).encode()
@@ -465,9 +464,6 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
             "selection_chars": raw.get("internal_detection", {}).get("selection_chars", 180),
             "overlap_threshold": raw.get("internal_detection", {}).get("overlap_threshold", 0.85),
         },
-        "session": {
-            "timeout_minutes": raw.get("session", {}).get("timeout_minutes", 45),
-        },
     }
     gram = int(result["internal_detection"]["gram_chars"])
     selection = int(result["internal_detection"]["selection_chars"])
@@ -478,8 +474,6 @@ def normalized_config(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("internal_detection.selection_chars doit être supérieur à gram_chars.")
     if not 0 < overlap <= 1:
         raise ValueError("internal_detection.overlap_threshold doit être compris entre 0 et 1.")
-    if result["session"]["timeout_minutes"] <= 0:
-        raise ValueError("session.timeout_minutes doit être supérieur à zéro.")
     return result
 
 
@@ -495,7 +489,6 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "archive_moves": {},
         "deletion_candidates": [],
         "file_lifecycles": {},
-        "excluded_sizes": {},
     }
 
 
@@ -514,6 +507,7 @@ def load_state(
     # Vestige des anciens états versionnés : il n'intervient plus dans la
     # reprise incrémentale et disparaît à la prochaine écriture.
     state.pop("version", None)
+    state.pop("excluded_sizes", None)
     if state.get("config_fingerprint") != fingerprint:
         raise ValueError("La configuration d'analyse a changé ; relancez avec --full-rebuild.")
     return state
@@ -584,7 +578,16 @@ def process_history_diff(
     archive_moves = state["archive_moves"]
     deletion_candidates = state["deletion_candidates"]
     file_lifecycles = state.setdefault("file_lifecycles", {})
-    excluded_sizes = state.setdefault("excluded_sizes", {})
+
+    def active_excluded_size(project: str) -> int:
+        """Taille des seules compilations actuellement présentes."""
+        return sum(
+            int(active.get("size", 0))
+            for lifecycle in file_lifecycles.values()
+            if (active := lifecycle.get("active_creation"))
+            and active.get("project") == project
+            and active.get("excluded_from_size")
+        )
     first_new_deletion_candidate = len(deletion_candidates)
     run_added_hashes: set[str] = set()
 
@@ -706,12 +709,6 @@ def process_history_diff(
                     lifecycle["deletions"] += 1
                     active_creation = lifecycle.pop("active_creation", None)
                     if active_creation:
-                        if active_creation.get("excluded_from_size"):
-                            excluded_sizes[active_creation["project"]] = max(
-                                0,
-                                int(excluded_sizes.get(active_creation["project"], 0))
-                                - int(active_creation["size"]),
-                            )
                         lifetime = minutes_between(
                             commit.timestamp,
                             active_creation["timestamp"],
@@ -752,14 +749,6 @@ def process_history_diff(
                         "timestamp": commit.timestamp,
                         "size": len(new_text),
                     })
-                    if active_creation.get("excluded_from_size"):
-                        project = active_creation["project"]
-                        excluded_sizes[project] = max(
-                            0,
-                            int(excluded_sizes.get(project, 0))
-                            + len(new_text)
-                            - int(active_creation["size"]),
-                        )
                     active_creation["size"] = len(new_text)
                 added_blocks = [
                     (part, winnowed_hashes(part, gram_chars, selection_chars))
@@ -907,11 +896,8 @@ def process_history_diff(
             for project, values in work.items():
                 novel_chars = int(values["novel"])
                 interval_start = commit_intervals.get(commit.sha)
-                gap = minutes_between(commit.timestamp, interval_start, 0.0) if interval_start else 0.0
-                current_rate = novel_chars / gap if novel_chars > 0 and gap > 0 else None
                 # Les fingerprints décident seuls : déjà connu signifie copie ou
-                # déplacement ; inconnu signifie production nouvelle. La vitesse
-                # reste informative et ne requalifie jamais le texte en import.
+                # déplacement ; inconnu signifie production nouvelle.
                 real_chars = novel_chars
                 event_index = len(events)
                 event_indexes[project] = event_index
@@ -925,8 +911,6 @@ def process_history_diff(
                     "internal_chars": values["internal"],
                     "edit_delta": 0,
                     "folders": sorted(values["folders"]),
-                    "rate_chars_per_minute": current_rate,
-                    "rate_percentile_threshold": None,
                     "duplication_sources": values["sources"],
                 })
                 for candidate_number, (source_file, part, removed_hashes) in enumerate(values["removed"]):
@@ -964,11 +948,6 @@ def process_history_diff(
                     "size_history": [],
                     "excluded_from_size": bool(record["exclude_from_size"]),
                 }
-                if record["exclude_from_size"] and whole_added:
-                    excluded_sizes[record["new_project"]] = (
-                        int(excluded_sizes.get(record["new_project"], 0))
-                        + len(whole_added[0])
-                    )
 
             if work:
                 relevant_commits += 1
@@ -980,7 +959,7 @@ def process_history_diff(
                     "size": max(
                         0,
                         int(historical_project_sizes.get(project, 0))
-                        - int(excluded_sizes.get(project, 0)),
+                        - active_excluded_size(project),
                     ),
                 })
             state["last_commit"] = commit.sha
@@ -1068,21 +1047,6 @@ def split_integer_over_days(value: int, days: list[str]) -> Iterable[tuple[str, 
         yield day, quotient + (1 if index >= first_extra else 0)
 
 
-def split_float_over_days(value: float, days: list[str]) -> Iterable[tuple[str, float]]:
-    share = value / len(days)
-    for day in days:
-        yield day, share
-
-
-def split_minutes_by_day(start: datetime, end: datetime) -> Iterable[tuple[str, float]]:
-    cursor = start
-    while cursor < end:
-        boundary = (cursor + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        segment_end = min(end, boundary)
-        yield cursor.date().isoformat(), (segment_end - cursor).total_seconds() / 60
-        cursor = segment_end
-
-
 def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
     events = sorted(state["events"], key=lambda item: (item["timestamp"], item["commit"], item["project"]))
     active_projects = {project for project, size in state["project_sizes"].items() if int(size) > 0}
@@ -1093,15 +1057,10 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
         lambda: {
             "signes_reels": 0,
             "signes_supprimes": 0,
-            "temps_minutes": 0.0,
-            "temps_inconnu": False,
-            "temps_estime": False,
             "dossiers": set(),
         }
     )
     events_by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    timeout_minutes = float(config["session"]["timeout_minutes"])
-    project_minutes: dict[str, float] = defaultdict(float)
     for event in events:
         if event["project"] not in active_projects:
             continue
@@ -1117,61 +1076,12 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
         for day, chars in split_integer_over_days(deleted_chars, days):
             daily[(day, event["project"])]["signes_supprimes"] += chars
 
-    for project, project_events in events_by_project.items():
-        known_chars = 0
-        known_minutes = 0.0
-        previous_project_timestamp: str | None = None
-        for event in project_events:
-            chars = int(event.get("real_chars", 0)) + max(0, -int(event.get("edit_delta", 0)))
-            days = production_days(event.get("interval_start"), event["timestamp"])
-            interval_start = event.get("interval_start")
-            commit_gap = minutes_between(event["timestamp"], interval_start, timeout_minutes) if interval_start else 0
-            continuous_project_commit = (
-                interval_start is not None
-                and previous_project_timestamp == interval_start
-                and 0 < commit_gap <= timeout_minutes
-            )
-            if continuous_project_commit:
-                start = datetime.fromisoformat(interval_start)
-                end = datetime.fromisoformat(event["timestamp"])
-                for day, minutes in split_minutes_by_day(start, end):
-                    daily[(day, project)]["temps_minutes"] += minutes
-                    project_minutes[project] += minutes
-                if chars > 0:
-                    known_chars += chars
-                    known_minutes += commit_gap
-                previous_project_timestamp = event["timestamp"]
-                continue
-
-            if chars <= 0 or known_chars <= 0 or known_minutes <= 0:
-                for day in days:
-                    daily[(day, project)]["temps_inconnu"] = True
-                previous_project_timestamp = event["timestamp"]
-                continue
-            project_rate = known_chars * 60 / known_minutes
-            estimated_minutes = chars * 60 / project_rate
-            # Le travail visible est nécessairement contenu dans l'intervalle
-            # Git. Si la moyenne historique exige davantage de temps, elle ne
-            # permet pas d'estimer ce commit : on expose alors une inconnue.
-            if not interval_start or estimated_minutes > commit_gap:
-                for day in days:
-                    daily[(day, project)]["temps_inconnu"] = True
-                previous_project_timestamp = event["timestamp"]
-                continue
-            for day, minutes in split_float_over_days(estimated_minutes, days):
-                daily[(day, project)]["temps_minutes"] += minutes
-                daily[(day, project)]["temps_estime"] = True
-                project_minutes[project] += minutes
-            previous_project_timestamp = event["timestamp"]
-
     daily_rows = [
         {
             "periode": period,
             "projet": project,
             "signes_reels": int(values["signes_reels"]),
             "signes_supprimes": int(values["signes_supprimes"]),
-            "temps_minutes": None if values["temps_inconnu"] else round(values["temps_minutes"], 2),
-            "temps_estime": values["temps_estime"] and not values["temps_inconnu"],
             "dossiers": sorted(values["dossiers"]),
         }
         for (period, project), values in sorted(daily.items())
@@ -1179,7 +1089,7 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
 
     def rollup(kind: str) -> list[dict[str, Any]]:
         rolled: dict[tuple[str, str], dict[str, Any]] = defaultdict(
-            lambda: {"signes_reels": 0, "signes_supprimes": 0, "temps_minutes": 0.0, "temps_inconnu": False, "temps_estime": False, "dossiers": set()}
+            lambda: {"signes_reels": 0, "signes_supprimes": 0, "dossiers": set()}
         )
         for row in daily_rows:
             day = datetime.fromisoformat(row["periode"])
@@ -1191,14 +1101,9 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
             values = rolled[(period, row["projet"])]
             values["signes_reels"] += row["signes_reels"]
             values["signes_supprimes"] += row["signes_supprimes"]
-            if row["temps_minutes"] is None:
-                values["temps_inconnu"] = True
-            else:
-                values["temps_minutes"] += row["temps_minutes"]
-            values["temps_estime"] = values["temps_estime"] or row.get("temps_estime", False)
             values["dossiers"].update(row.get("dossiers", []))
         return [
-            {"periode": p, "projet": project, "signes_reels": int(v["signes_reels"]), "signes_supprimes": int(v["signes_supprimes"]), "temps_minutes": None if v["temps_inconnu"] else round(v["temps_minutes"], 2), "temps_estime": v["temps_estime"] and not v["temps_inconnu"], "dossiers": sorted(v["dossiers"])}
+            {"periode": p, "projet": project, "signes_reels": int(v["signes_reels"]), "signes_supprimes": int(v["signes_supprimes"]), "dossiers": sorted(v["dossiers"])}
             for (p, project), v in sorted(rolled.items())
         ]
 
@@ -1223,22 +1128,22 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
                 f"davantage que les {historical_added_total} signes ajoutés au fil de son histoire.",
                 file=sys.stderr,
             )
-        time_unknown = any(
-            values["temps_inconnu"]
-            for (day, candidate), values in daily.items()
-            if candidate == project
-        )
         projects.append({
             **custom,
             "id": project,
             "title": custom.get("title", project),
-            "temps_minutes_total": None if time_unknown else round(project_minutes.get(project, 0.0), 2),
             "signes_reels_total": real_total,
             "signes_supprimes_total": deleted_total,
             "taille_actuelle": max(
                 0,
                 int(state["project_sizes"].get(project, 0))
-                - int(state.get("excluded_sizes", {}).get(project, 0)),
+                - sum(
+                    int(active.get("size", 0))
+                    for lifecycle in state.get("file_lifecycles", {}).values()
+                    if (active := lifecycle.get("active_creation"))
+                    and active.get("project") == project
+                    and active.get("excluded_from_size")
+                ),
             ),
             "date_creation": project_events[0]["timestamp"] if project_events else None,
             "derniere_activite": project_events[-1]["timestamp"] if project_events else None,
@@ -1262,11 +1167,6 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
 
     total_real = sum(project["signes_reels_total"] for project in projects)
     total_deleted = sum(project["signes_supprimes_total"] for project in projects)
-    total_minutes = (
-        None
-        if any(project["temps_minutes_total"] is None for project in projects)
-        else sum(project["temps_minutes_total"] for project in projects)
-    )
     cutoff = datetime.now().astimezone().date() - timedelta(days=30)
     recent_scores: dict[str, float] = defaultdict(float)
     for row in daily_rows:
@@ -1275,7 +1175,6 @@ def aggregate(state: dict[str, Any], config: dict[str, Any], metadata: dict[str,
     most_active = max(recent_scores, key=recent_scores.get) if recent_scores else None
     title_by_id = {project["id"]: project["title"] for project in projects}
     overview = {
-        "temps_minutes_total": None if total_minutes is None else round(total_minutes, 2),
         "signes_reels_total": total_real,
         "signes_supprimes_total": total_deleted,
         "nombre_projets": len(projects),

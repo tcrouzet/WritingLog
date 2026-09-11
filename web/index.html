@@ -23,7 +23,6 @@
   <main>
     <p id="error" class="error" hidden></p>
     <section class="overview" aria-label="Vue d'ensemble">
-      <article class="stat"><span>Temps d’écriture estimé</span><strong id="total-time">—</strong></article>
       <article class="stat"><span>Signes produits</span><strong id="total-chars">—</strong></article>
       <article class="stat"><span>Projets suivis</span><strong id="project-count">—</strong></article>
     </section>
@@ -34,10 +33,6 @@
       <article class="panel wide">
         <header><div><h2>Production</h2><p>Texte nouveau · copies et déplacements exclus par l’analyse</p></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><select class="chart-range" data-chart="daily" aria-label="Période du graphique de production"><option value="30d" selected>30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="canvas-wrap"><canvas id="daily-chart"></canvas></div>
-      </article>
-      <article class="panel wide" id="time-panel">
-        <header><h2>Temps passé par projet</h2><div class="chart-actions"><select class="chart-range" data-chart="time" aria-label="Période du temps passé"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y" selected>1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
-        <div class="canvas-wrap"><canvas id="time-chart"></canvas></div>
       </article>
       <article class="panel wide">
         <header><div><h2>Taille</h2><p>Taille logique du manuscrit · compilations et doublons exclus</p></div><div class="chart-actions"><select class="chart-range" data-chart="size" aria-label="Période de la taille du manuscrit"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all" selected>Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>

@@ -2,7 +2,6 @@
   {
     "id": "727",
     "title": "727",
-    "temps_minutes_total": null,
     "signes_reels_total": 140050,
     "signes_supprimes_total": 3250,
     "taille_actuelle": 179639,
@@ -12,7 +11,6 @@
   {
     "id": "BornToBike",
     "title": "BornToBike",
-    "temps_minutes_total": null,
     "signes_reels_total": 86683,
     "signes_supprimes_total": 6314,
     "taille_actuelle": 3149952,
@@ -22,7 +20,6 @@
   {
     "id": "Carnets",
     "title": "Carnets",
-    "temps_minutes_total": null,
     "signes_reels_total": 17375,
     "signes_supprimes_total": 8296,
     "taille_actuelle": 3912593,
@@ -32,7 +29,6 @@
   {
     "id": "Divers",
     "title": "Divers",
-    "temps_minutes_total": null,
     "signes_reels_total": 57024,
     "signes_supprimes_total": 4442,
     "taille_actuelle": 178111,
@@ -42,7 +38,6 @@
   {
     "id": "IA",
     "title": "IA",
-    "temps_minutes_total": null,
     "signes_reels_total": 400916,
     "signes_supprimes_total": 19958,
     "taille_actuelle": 748760,
@@ -54,21 +49,23 @@
     "folder": "Isa/manuscrit",
     "history_folders": [
       "Zone/manuscrit",
+      "Zone/manuscritV1",
+      "Zone/manuscritv2",
+      "Zone/Maison",
+      "Zone/archives/manuscritV1",
       "Isa/Maison",
       "Isa/archives/manuscritV1"
     ],
     "id": "Isa",
-    "temps_minutes_total": null,
-    "signes_reels_total": 618393,
-    "signes_supprimes_total": 127193,
-    "taille_actuelle": 0,
+    "signes_reels_total": 653543,
+    "signes_supprimes_total": 128704,
+    "taille_actuelle": 327878,
     "date_creation": "2025-08-02T10:38:31+02:00",
     "derniere_activite": "2026-09-11T08:00:51+02:00"
   },
   {
     "id": "L'atelier d'écriture",
     "title": "L'atelier d'écriture",
-    "temps_minutes_total": null,
     "signes_reels_total": 3,
     "signes_supprimes_total": 0,
     "taille_actuelle": 2278603,
@@ -78,7 +75,6 @@
   {
     "id": "Le roman de mon père",
     "title": "Le roman de mon père",
-    "temps_minutes_total": null,
     "signes_reels_total": 87,
     "signes_supprimes_total": 0,
     "taille_actuelle": 3368100,
@@ -88,7 +84,6 @@
   {
     "id": "Projets",
     "title": "Projets",
-    "temps_minutes_total": null,
     "signes_reels_total": 2638,
     "signes_supprimes_total": 0,
     "taille_actuelle": 661807,
@@ -99,7 +94,6 @@
     "title": "Rush",
     "folder": "Archives/Rush/manuscrit",
     "id": "Rush",
-    "temps_minutes_total": null,
     "signes_reels_total": 133307,
     "signes_supprimes_total": 78702,
     "taille_actuelle": 0,
@@ -109,7 +103,6 @@
   {
     "id": "WIP",
     "title": "WIP",
-    "temps_minutes_total": null,
     "signes_reels_total": 3681295,
     "signes_supprimes_total": 140626,
     "taille_actuelle": 2256254,
@@ -119,7 +112,6 @@
   {
     "id": "iT",
     "title": "iT",
-    "temps_minutes_total": null,
     "signes_reels_total": 585094,
     "signes_supprimes_total": 139352,
     "taille_actuelle": 679634,
@@ -129,7 +121,6 @@
   {
     "id": "tcrouzet",
     "title": "tcrouzet",
-    "temps_minutes_total": null,
     "signes_reels_total": 26878793,
     "signes_supprimes_total": 1486440,
     "taille_actuelle": 15858790,

@@ -10,21 +10,13 @@
   let data;
   let selectedProject = "all";
   let productionGranularity = "day";
-  const periods = { daily: "30d", time: "1y", size: "all" };
+  const periods = { daily: "30d", size: "all" };
 
   const title = id => data.projects.find(project => project.id === id)?.title || id;
   const color = id => {
     if (!colors.has(id)) colors.set(id, palette[colors.size % palette.length]);
     return colors.get(id);
   };
-  const duration = minutes => {
-    if (minutes === null || !Number.isFinite(Number(minutes))) return "—";
-    const rounded = Math.round(minutes || 0);
-    const hours = Math.floor(rounded / 60);
-    const rest = rounded % 60;
-    return hours ? `${formatter.format(hours)} h ${String(rest).padStart(2, "0")}` : `${rest} min`;
-  };
-
   function latestDate() {
     const values = [...data.daily.map(row => row.periode), ...data.size_evolution.map(row => row.date)].sort();
     return values.at(-1) || new Date().toISOString().slice(0, 10);
@@ -163,8 +155,6 @@
         y: row.signes_reels,
         chars: row.signes_reels,
         period: row.periode,
-        minutes: row.temps_minutes,
-        estimated: Boolean(row.temps_estime),
         folders: row.dossiers || []
       });
       return {
@@ -185,11 +175,8 @@
       title: items => productionPeriodLabel(items[0].raw.period, kind),
       label: context => `Produits : ${formatter.format(context.raw.chars)} signes`,
       afterLabel: context => {
-        const minutes = context.raw.minutes === null ? null : Number(context.raw.minutes);
-        const rate = minutes > 0 ? Math.round(context.raw.chars * 60 / minutes) : null;
         const folders = context.raw.folders.length ? context.raw.folders.join(", ") : "—";
-        const timeLabel = minutes === null ? "Temps : inconnu" : `${context.raw.estimated ? "Temps estimé" : "Temps observé"} : ${duration(minutes)}`;
-        return [`Dossier : ${folders}`, timeLabel, `Production : ${rate === null ? "—" : formatter.format(rate)} signes/heure`];
+        return `Dossier : ${folders}`;
       }
     };
     return new Chart(canvas, { type: "bar", data: { datasets }, options });
@@ -200,9 +187,6 @@
   }
 
   function renderCards(rows) {
-    const timeKnown = rows.every(row => row.temps_minutes !== null);
-    const minutes = timeKnown ? rows.reduce((sum, row) => sum + row.temps_minutes, 0) : null;
-    document.querySelector("#total-time").textContent = duration(minutes);
     document.querySelector("#total-chars").textContent = formatter.format(rows.reduce((sum, row) => sum + row.signes_reels, 0));
     document.querySelector("#project-count").textContent = formatter.format(visibleProjects().length);
   }
@@ -412,30 +396,6 @@
     selectedTitle.textContent = selectedProject === "all" ? "" : title(selectedProject);
     const productionData = productionGranularity === "week" ? data.weekly : productionGranularity === "month" ? data.monthly : data.daily;
     charts.daily = productionChart(document.querySelector("#daily-chart"), periodRows(productionData, productionGranularity, periods.daily), productionGranularity);
-    const timePanel = document.querySelector("#time-panel");
-    timePanel.hidden = selectedProject !== "all";
-    if (selectedProject === "all") {
-      const timeRows = filteredDaily(periods.time);
-      const minutes = new Map();
-      for (const row of timeRows) {
-        const value = minutes.get(row.projet) || { total: 0, known: true };
-        if (row.temps_minutes === null) value.known = false;
-        else value.total += row.temps_minutes;
-        minutes.set(row.projet, value);
-      }
-      const projects = visibleProjects().slice().sort((a, b) => (minutes.get(b.id)?.total || 0) - (minutes.get(a.id)?.total || 0));
-      const timeOptions = commonOptions(false);
-      timeOptions.indexAxis = "y";
-      timeOptions.plugins.legend.display = false;
-      timeOptions.plugins.tooltip.callbacks = { label: context => duration(context.raw) };
-      timeOptions.scales.x.ticks.callback = value => duration(value);
-      charts.time = new Chart(document.querySelector("#time-chart"), {
-        type: "bar",
-        data: { labels: projects.map(project => project.title), datasets: [{ data: projects.map(project => minutes.get(project.id)?.known ? minutes.get(project.id).total : null), backgroundColor: projects.map(project => color(project.id)), borderRadius: 2 }] },
-        options: timeOptions
-      });
-    }
-
     const sizes = filteredSizes(periods.size);
     const sizeTemporal = temporalAxis(sizes, "date");
     const sizeDatasets = visibleProjects().map(project => {
@@ -446,6 +406,7 @@
         pointRadius: sizes.length > 100 ? 0 : 2,
         pointHoverRadius: 5,
         spanGaps: false,
+        stepped: "after",
         tension: 0
       };
     });

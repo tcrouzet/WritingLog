@@ -4,7 +4,7 @@ Writing Log transforme l’historique Git d’un vault Obsidian en statistiques 
 
 ## Avertissement — limites de la mesure
 
-Writing Log reste un prototype : Git ne contient pas assez d’information pour reconstituer avec certitude la production et le temps de travail. Les classifications sont contrôlables, mais ne doivent pas être confondues avec une observation de la frappe.
+Writing Log reste un prototype : Git ne contient pas assez d’information pour reconstituer avec certitude la production. Les classifications sont contrôlables, mais ne doivent pas être confondues avec une observation de la frappe.
 
 ### Ce que Git permet réellement d’observer
 
@@ -26,17 +26,17 @@ La détection des déplacements reposait sur des blocs séparés par paragraphes
 
 La règle trop large « tout fichier créé puis supprimé = fichier transitoire » pouvait écarter un véritable texte abandonné. Elle a été remplacée par un signal plus strict : seule la réapparition d’un même chemin déjà créé puis supprimé, dont la majorité des fingerprints possède une origine antérieure, caractérise une compilation récurrente.
 
-### Pourquoi les jours et les durées sont artificiels
+### Pourquoi les jours sont artificiels
 
 Lorsque plusieurs jours séparent deux commits, la production attribuée au second est divisée uniformément entre les dates intermédiaires. Cette ventilation évite un pic sur la date du commit, mais elle **n’observe aucun jour de production réel**. Un texte écrit en une soirée et commité quatre jours plus tard devient quatre journées fictives de même volume. Un commit intermédiaire sans rapport avec le projet raccourcit en plus cette fenêtre, puisque chaque commit constitue un nouvel instantané du vault.
 
-Les écarts courts entre commits ne mesurent pas davantage le temps passé à écrire : l’auteur peut avoir travaillé hors d’Obsidian, laissé l’éditeur ouvert ou effectué plusieurs opérations entre deux sauvegardes. La vitesse moyenne apprise à partir de ces écarts propage donc cette incertitude dans les estimations ultérieures. Afficher `temps inconnu` évite d’inventer une valeur lorsque la base manque, mais ne rend pas fiables les durées dites observées ou estimées.
+Les écarts entre commits ne mesurent pas le temps passé à écrire : l’auteur peut avoir travaillé hors d’Obsidian, laissé l’éditeur ouvert ou effectué plusieurs opérations entre deux sauvegardes. Writing Log ne calcule donc plus aucune durée de travail ni aucun rythme en signes par heure.
 
 Les suppressions négatives décrivent uniquement des caractères présents dans un instantané puis absents du suivant. Elles peuvent correspondre à une coupe éditoriale, mais aussi à une restructuration, un déplacement non reconnu, une normalisation ou une modification de format.
 
 ### Conséquence
 
-Les JSON et graphiques ne permettent pas d’affirmer avec certitude quel jour un passage a été frappé ni combien d’heures ont été travaillées. La production repose désormais sur une règle textuelle vérifiable : un passage déjà connu est une copie ou un déplacement ; un passage inconnu est nouveau. La vitesse d’écriture n’intervient plus dans cette décision.
+Les JSON et graphiques ne permettent pas d’affirmer avec certitude quel jour un passage a été frappé. La production repose désormais sur une règle textuelle vérifiable : un passage déjà connu est une copie ou un déplacement ; un passage inconnu est nouveau. Aucune durée de travail n’est produite.
 
 ## Commandes à utiliser
 
@@ -68,7 +68,7 @@ Les environnements sont séparés : `.venv/` est réservé à l’analyse et `.v
 python -m pip install -r scripts/requirements.txt
 ```
 
-Dans `config.yaml`, indiquez `vault_path`. Un chemin relatif est résolu depuis le dossier qui contient la configuration, pas depuis le terminal. Ajustez ensuite les dossiers exclus, les paramètres du winnowing et la durée maximale d’une session observable.
+Dans `config.yaml`, indiquez `vault_path`. Un chemin relatif est résolu depuis le dossier qui contient la configuration, pas depuis le terminal. Ajustez ensuite les dossiers exclus et les paramètres du winnowing.
 
 `history_repo` peut pointer vers un miroir Git local dédié. La configuration fournie utilise `.cache/vault-history.git`. Créez ou actualisez ce miroir vous-même avant l’analyse :
 
@@ -160,7 +160,7 @@ La classification ne possède plus que deux voies :
 
 Le rythme en signes par minute n’est plus un critère de classification. Le champ historique `import_chars` est conservé pour compatibilité, mais vaut toujours zéro dans une reconstruction neuve. Un collage extérieur dont le texte n’a jamais existé dans le vault est donc considéré comme nouveau : les fingerprints ne peuvent pas en connaître la provenance externe. Dans les deux cas, les fingerprints du bloc sont ajoutés avec leur nouvelle provenance. La taille logique part du contenu physique, puis retire les fichiers reconnus comme compilations ou doublons.
 
-Les suppressions effectuées à l’intérieur d’un fichier suivi constituent une quatrième mesure : l’**activité éditoriale négative**. Pour chaque fragment disparu, Writing Log recherche ses fingerprints dans les provenances des autres fichiers du vault. Si le seuil de recouvrement est atteint, le fragment est une copie, un déplacement ou une fusion et n’entre pas dans `signes_supprimes`. Cette recherche porte sur l’historique persistant : elle fonctionne si l’autre occurrence précède, accompagne ou suit la suppression. Dans ce dernier cas, une analyse incrémentale corrige rétroactivement l’événement ancien dès la réapparition du texte.
+Les suppressions effectuées à l’intérieur d’un fichier suivi constituent une quatrième mesure : l’**activité éditoriale négative**. Pour chaque fragment disparu, Writing Log recherche ses fingerprints dans les provenances persistantes des autres fichiers du vault et dans les occurrences encore actives. Une empreinte retrouvée suffit à identifier une copie, un déplacement ou une fusion ; le fragment n’entre alors pas dans `signes_supprimes`. La propre provenance historique du fichier supprimé est explicitement ignorée, sinon toute vraie coupe se reconnaîtrait elle-même. Cette recherche fonctionne si l’autre occurrence précède, accompagne ou suit la suppression. Dans ce dernier cas, une analyse incrémentale corrige rétroactivement l’événement ancien dès la réapparition du texte.
 
 Seule une disparition sans autre provenance est exportée comme quantité positive `signes_supprimes`. Une occurrence identique encore active dans le même fichier suffit également à écarter la suppression : retirer la seconde copie d’un paragraphe ne crée donc aucune production négative. La disparition complète d’un fichier reste exclue, car les fichiers temporaires de fusion apparaissent puis disparaissent fréquemment. Un contrôle de cohérence avertit sur stderr si le total supprimé d’un projet dépasse tous les signes ajoutés au fil de son histoire. Cette mesure éditoriale reste disponible dans les JSON, mais elle n’est jamais injectée dans le graphique de production.
 
@@ -174,25 +174,12 @@ Git enregistre la date du commit, pas la date de frappe de chaque caractère. Qu
 
 Cette répartition est une estimation imposée par l’absence de commits intermédiaires. Elle préserve exactement le total, mais ne prétend pas reconstruire l’heure ou le jour exact de chaque phrase.
 
-### 6. Le temps n’est jamais déduit d’un taux arbitraire
-
-Une durée est observable uniquement lorsqu’un commit touchant le projet suit immédiatement un autre commit touchant ce même projet et que leur écart ne dépasse pas `session.timeout_minutes`.
-
-Ces fenêtres observées construisent progressivement une vitesse moyenne propre au projet. Pour un commit espacé :
-
-- si le projet possède déjà une vitesse historique fiable, elle permet une estimation ;
-- si l’estimation dépasserait l’intervalle Git disponible, elle est rejetée ;
-- sans vitesse historique fiable, le temps et le ratio signes/heure restent `inconnus`.
-
-Aucune vitesse fixe, aucun minimum de temps et aucun plafond de signes par heure ne sont inventés. Les JSON distinguent les temps observés, les temps estimés (`temps_estime: true`) et les temps inconnus (`temps_minutes: null`).
-
-### 7. Les sorties sont reconstruites depuis les événements
+### 6. Les sorties sont reconstruites depuis les événements
 
 Les événements classés alimentent ensuite :
 
 - les productions quotidiennes, hebdomadaires et mensuelles ;
 - les signes supprimés pendant le travail éditorial, affichés sous l’axe zéro ;
-- les temps et rythmes lorsqu’ils sont disponibles ;
 - la production cumulée, qui additionne uniquement l’écriture réelle ;
 - la taille logique actuelle du chemin `folder`, compilations et doublons exclus.
 
@@ -248,7 +235,7 @@ La génération des JSON et celle du site web sont deux commandes indépendantes
 
 `./analyse.sh` met à jour uniquement `site/data/*.json`. `./web.sh` copie les sources de `web/` vers `site/`, sans modifier les JSON et sans démarrer de serveur.
 
-Le filtre principal permet d’isoler un projet. Le graphique « Production » regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi, le temps observé ou estimé lorsqu’il existe, et le ratio de signes produits par heure.
+Le filtre principal permet d’isoler un projet. Le graphique « Production » regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi.
 
 Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit au dernier commit de chaque jour, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. La courbe monte ou descend sans lissage et n’est pas reconstruite à partir de la production. Chaque graphique possède son propre choix de période — 30 jours, 6 mois, 1 an ou tout l’historique lorsque cette granularité est pertinente. Les JSON conservent toujours l’historique complet.
 
@@ -261,14 +248,14 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - Un signe est un caractère du Markdown brut après décodage UTF-8 ; ce n’est ni un mot ni une lettre normalisée.
 - Sans commit intermédiaire, aucune méthode ne peut retrouver exactement le jour de frappe. Writing Log affiche alors la répartition estimée décrite plus haut.
 - La détection des duplications dépend de l’historique disponible. Un texte provenant de l’extérieur du vault est impossible à distinguer d’un texte frappé : tous deux possèdent des fingerprints nouveaux.
-- `state.json` mémorise les tailles, les rythmes observés et les événements nécessaires aux agrégats. L’index SQLite reste dans `.cache/` et n’est pas publié.
+- `state.json` mémorise les tailles et les événements nécessaires aux agrégats. L’index SQLite reste dans `.cache/` et n’est pas publié.
 - `duplications.json` expose volontairement les chemins des fichiers et commits d’origine afin de rendre chaque rapprochement contrôlable. Aucun contenu Markdown n’est exporté.
 
 ## Structure des sorties
 
 - `overview.json` : totaux et fraîcheur des données ;
-- `projects.json` : totaux d’écriture réelle, suppressions éditoriales, temps, taille actuelle et métadonnées de chaque projet ;
-- `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés, temps disponible, statut estimé et dossiers racines par période et projet ;
+- `projects.json` : totaux d’écriture réelle, suppressions éditoriales, taille actuelle et métadonnées de chaque projet ;
+- `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
 - `size_evolution.json` : taille logique du manuscrit au dernier commit de chaque jour et par projet ;
 - `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
 - `state.json` : état interne nécessaire au traitement incrémental.
