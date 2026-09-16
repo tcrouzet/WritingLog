@@ -1030,7 +1030,13 @@ output_dir: site
             for row in self.load("size_evolution.json")
             if row["projet"] == "Alpha"
         ]
-        self.assertEqual(sizes, [len(first_text), len(second_text), len(final_text)])
+        self.assertEqual(sizes, [len(final_text)] * 3)
+        raw_sizes = [
+            row["taille_brute"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(raw_sizes, [len(first_text), len(first_text), len(final_text)])
 
     def test_exact_unique_file_renamed_then_deleted_is_removed_from_history(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"

@@ -116,7 +116,9 @@ Une correspondance explicite dans `projet.yml` est prioritaire sur `excluded_fol
 
 La filiation textuelle ne s’arrête pas à cette liste statique. Dès qu’un fichier attribué à un projet est renommé ou déplacé, il conserve cet identifiant même si sa destination — par exemple `Isa/archives/Maison` ou `Isa/archives/manuscritV1-2025` — n’était pas encore déclarée dans `history_folders`. Le registre des fichiers propage ensuite cette attribution aux modifications et à la suppression éventuelle du nouveau chemin : son texte reste reconnaissable et son activité reste rattachée au bon projet.
 
-La **taille du manuscrit** obéit à une règle distincte. Une seule racine est active : lorsqu’une nouvelle racine historique apparaît ou reçoit les fichiers de la précédente, elle la remplace dans la courbe au lieu de s’y additionner. Les anciennes versions rangées dans un sous-dossier `archives` ne comptent jamais, sauf lorsque le `folder` courant du projet se trouve lui-même sous `Archives`. Ainsi, la coexistence temporaire de V1 et V2 ne crée pas une bosse artificielle.
+La **taille du manuscrit** obéit à une règle distincte. Une seule racine est active. La simple apparition d’une V2 incomplète ne suffit pas à abandonner la V1 : le changement intervient lorsque l’ancienne racine est transférée ou disparaît, ou lorsque le dossier courant reçoit effectivement le manuscrit. Les anciennes versions rangées dans un sous-dossier `archives` ne comptent jamais, sauf lorsque le `folder` courant du projet se trouve lui-même sous `Archives`.
+
+La série logique est ensuite raccordée à rebours depuis la taille physique actuelle. À l’intérieur d’une même racine, chaque hausse et chaque baisse réelle est conservée exactement. Au seul instant d’un changement de racine, l’écart de taille entre les deux dossiers est neutralisé : une copie progressive de V1 vers V2 ne produit donc ni gouffre ni montagne artificielle. La mesure physique avant raccordement reste exportée dans `taille_brute` pour audit ; le graphique utilise `taille_signes`.
 
 ### 3. Un index winnowé persistant représente le texte déjà rencontré
 
@@ -139,7 +141,7 @@ Quand un fichier change, son contenu complet sert uniquement à calculer le diff
 
 L’index complet n’est jamais rechargé ni recalculé à chaque commit. Lorsqu’un fingerprint n’est plus actif dans un fichier, sa ligne historique reste dans `fingerprints` et reçoit le commit dans `removed_at_commit`; elle peut donc identifier une réapparition future. La table auxiliaire mémorise un compteur d’occurrences par couple fichier/hash afin qu’une suppression partielle ne fasse pas disparaître un fingerprint encore présent ailleurs dans le même fichier.
 
-SQLite conserve deux chronologies relationnelles distinctes. `commits` contient chaque commit global traité. `project_commits` contient un instantané pour chaque couple commit/projet à partir de la première apparition du projet, même lorsque le commit ne modifie pas ce projet : taille, racine active et indicateur `touched`. Sa clé primaire `(commit_hash, project)` empêche les doublons. `size_evolution.json` est exporté directement depuis cette table, sans regroupement quotidien, avec le timestamp complet et le hash du commit.
+SQLite conserve deux chronologies relationnelles distinctes. `commits` contient chaque commit global traité. `project_commits` contient un instantané pour chaque couple commit/projet à partir de la première apparition du projet, même lorsque le commit ne modifie pas ce projet : taille logique, `raw_size`, racine active et indicateur `touched`. Sa clé primaire `(commit_hash, project)` empêche les doublons. `size_evolution.json` est exporté directement depuis cette table, sans regroupement quotidien, avec le timestamp complet et le hash du commit.
 
 ### 4. Les changements sont classés
 
@@ -271,7 +273,7 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - `overview.json` : totaux et fraîcheur des données ;
 - `projects.json` : totaux d’écriture réelle, suppressions éditoriales, taille actuelle et métadonnées de chaque projet ;
 - `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
-- `size_evolution.json` : taille logique du manuscrit à chaque commit global, avec timestamp, hash et indicateur de modification du projet ;
+- `size_evolution.json` : tailles logique (`taille_signes`) et brute (`taille_brute`) du manuscrit à chaque commit global, avec timestamp, hash et indicateur de modification du projet ;
 - `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
 
 `state.json` n’est plus généré : l’état interne reste exclusivement dans SQLite.

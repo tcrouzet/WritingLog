@@ -8310,7 +8310,7 @@
     "periode": "2026-03-10",
     "projet": "tcrouzet",
     "signes_reels": 5097,
-    "signes_supprimes": 1484,
+    "signes_supprimes": 1266,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8507,11 +8507,9 @@
   {
     "periode": "2026-04-01",
     "projet": "Isa",
-    "signes_reels": 414,
+    "signes_reels": 0,
     "signes_supprimes": 1,
     "dossiers": [
-      "Zone/manuscrit",
-      "Zone/manuscritV1",
       "Zone/manuscritv2"
     ]
   },
@@ -8519,7 +8517,7 @@
     "periode": "2026-04-01",
     "projet": "tcrouzet",
     "signes_reels": 4006,
-    "signes_supprimes": 2709,
+    "signes_supprimes": 2006,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8573,7 +8571,7 @@
     "periode": "2026-04-07",
     "projet": "tcrouzet",
     "signes_reels": 11672,
-    "signes_supprimes": 2608,
+    "signes_supprimes": 1819,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8600,7 +8598,7 @@
     "periode": "2026-04-09",
     "projet": "Isa",
     "signes_reels": 1415,
-    "signes_supprimes": 515,
+    "signes_supprimes": 426,
     "dossiers": [
       "Zone/manuscritv2"
     ]
@@ -8628,7 +8626,7 @@
     "periode": "2026-04-10",
     "projet": "tcrouzet",
     "signes_reels": 2111,
-    "signes_supprimes": 748,
+    "signes_supprimes": 543,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8637,7 +8635,7 @@
     "periode": "2026-04-11",
     "projet": "tcrouzet",
     "signes_reels": 3161,
-    "signes_supprimes": 904,
+    "signes_supprimes": 640,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8672,7 +8670,7 @@
   {
     "periode": "2026-04-14",
     "projet": "Isa",
-    "signes_reels": 2424,
+    "signes_reels": 2422,
     "signes_supprimes": 252,
     "dossiers": [
       "Zone/manuscritv2"
@@ -8730,7 +8728,7 @@
   {
     "periode": "2026-04-17",
     "projet": "Isa",
-    "signes_reels": 1592,
+    "signes_reels": 1586,
     "signes_supprimes": 775,
     "dossiers": [
       "Zone/manuscrit"
@@ -8931,7 +8929,7 @@
     "periode": "2026-04-28",
     "projet": "tcrouzet",
     "signes_reels": 178,
-    "signes_supprimes": 210,
+    "signes_supprimes": 0,
     "dossiers": [
       "tcrouzet"
     ]
@@ -8978,7 +8976,7 @@
     "periode": "2026-05-01",
     "projet": "tcrouzet",
     "signes_reels": 2802,
-    "signes_supprimes": 3900,
+    "signes_supprimes": 2933,
     "dossiers": [
       "tcrouzet"
     ]
@@ -11928,7 +11926,7 @@
   {
     "periode": "2026-09-05",
     "projet": "Isa",
-    "signes_reels": 7335,
+    "signes_reels": 6848,
     "signes_supprimes": 0,
     "dossiers": [
       "Isa",
@@ -11947,7 +11945,7 @@
   {
     "periode": "2026-09-06",
     "projet": "Isa",
-    "signes_reels": 7336,
+    "signes_reels": 6848,
     "signes_supprimes": 0,
     "dossiers": [
       "Isa",
@@ -11966,7 +11964,7 @@
   {
     "periode": "2026-09-07",
     "projet": "Isa",
-    "signes_reels": 7336,
+    "signes_reels": 6849,
     "signes_supprimes": 0,
     "dossiers": [
       "Isa",
@@ -11985,7 +11983,7 @@
   {
     "periode": "2026-09-08",
     "projet": "Isa",
-    "signes_reels": 7336,
+    "signes_reels": 6849,
     "signes_supprimes": 0,
     "dossiers": [
       "Isa",
@@ -12005,7 +12003,7 @@
     "periode": "2026-09-09",
     "projet": "Isa",
     "signes_reels": 4466,
-    "signes_supprimes": 987,
+    "signes_supprimes": 959,
     "dossiers": [
       "Isa/manuscrit"
     ]
@@ -12014,7 +12012,7 @@
     "periode": "2026-09-10",
     "projet": "Isa",
     "signes_reels": 4467,
-    "signes_supprimes": 988,
+    "signes_supprimes": 959,
     "dossiers": [
       "Isa/manuscrit"
     ]
@@ -12022,10 +12020,128 @@
   {
     "periode": "2026-09-11",
     "projet": "Isa",
-    "signes_reels": 1891,
-    "signes_supprimes": 245,
+    "signes_reels": 4955,
+    "signes_supprimes": 2484,
     "dossiers": [
       "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-11",
+    "projet": "tcrouzet",
+    "signes_reels": 3239,
+    "signes_supprimes": 624,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-09-12",
+    "projet": "Isa",
+    "signes_reels": 6635,
+    "signes_supprimes": 3001,
+    "dossiers": [
+      "Isa",
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-12",
+    "projet": "tcrouzet",
+    "signes_reels": 7834,
+    "signes_supprimes": 990,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-09-13",
+    "projet": "Isa",
+    "signes_reels": 9207,
+    "signes_supprimes": 1893,
+    "dossiers": [
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-13",
+    "projet": "tcrouzet",
+    "signes_reels": 450,
+    "signes_supprimes": 233,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-09-14",
+    "projet": "727",
+    "signes_reels": 7189,
+    "signes_supprimes": 1885,
+    "dossiers": [
+      "727"
+    ]
+  },
+  {
+    "periode": "2026-09-14",
+    "projet": "Isa",
+    "signes_reels": 13098,
+    "signes_supprimes": 9988,
+    "dossiers": [
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-15",
+    "projet": "727",
+    "signes_reels": 1102,
+    "signes_supprimes": 610,
+    "dossiers": [
+      "727"
+    ]
+  },
+  {
+    "periode": "2026-09-15",
+    "projet": "BornToBike",
+    "signes_reels": 340,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "BornToBike"
+    ]
+  },
+  {
+    "periode": "2026-09-15",
+    "projet": "Isa",
+    "signes_reels": 2531,
+    "signes_supprimes": 1184,
+    "dossiers": [
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-15",
+    "projet": "tcrouzet",
+    "signes_reels": 332,
+    "signes_supprimes": 0,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-09-16",
+    "projet": "Isa",
+    "signes_reels": 12591,
+    "signes_supprimes": 3554,
+    "dossiers": [
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-09-16",
+    "projet": "tcrouzet",
+    "signes_reels": 38,
+    "signes_supprimes": 14,
+    "dossiers": [
+      "tcrouzet"
     ]
   }
 ]

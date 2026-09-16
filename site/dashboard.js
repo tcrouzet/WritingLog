@@ -405,6 +405,7 @@
         data: sizes.filter(row => row.projet === project.id).map(row => ({
           x: periodTimestamp(row.date),
           y: row.taille_signes,
+          rawSize: row.taille_brute ?? row.taille_signes,
           timestamp: row.date,
           commit: row.commit || "",
           touched: Boolean(row.modifie)
@@ -427,7 +428,10 @@
       afterLabel: context => context.raw.commit
         ? [
             `Commit : ${context.raw.commit.slice(0, 12)}`,
-            context.raw.touched ? "Projet modifié" : "Taille inchangée"
+            context.raw.touched ? "Projet modifié" : "Taille inchangée",
+            ...(context.raw.rawSize !== context.raw.y
+              ? [`Mesure brute : ${formatter.format(context.raw.rawSize)} signes`]
+              : [])
           ]
         : "Valeur au début de la période"
     };

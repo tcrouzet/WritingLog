@@ -471,6 +471,32 @@ def size_location_for(
     return project, folded[0]
 
 
+def normalize_size_history(size_points: list[dict[str, Any]]) -> None:
+    """Raccorde les versions d'un manuscrit sans lisser leurs variations internes.
+
+    La taille physique du dernier commit reste l'ancre. En remontant le temps,
+    les deltas sont conservés tant que la racine ne change pas ; le seul écart
+    neutralisé est celui du passage d'une racine de version à une autre.
+    """
+    by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for point in size_points:
+        point.setdefault("raw_size", int(point["size"]))
+        by_project[point["project"]].append(point)
+    for points in by_project.values():
+        points.sort(key=lambda point: (point["timestamp"], point["commit"]))
+        if not points:
+            continue
+        points[-1]["size"] = max(0, int(points[-1]["raw_size"]))
+        for index in range(len(points) - 2, -1, -1):
+            point = points[index]
+            following = points[index + 1]
+            if point.get("size_root") == following.get("size_root"):
+                delta = int(following["raw_size"]) - int(point["raw_size"])
+                point["size"] = max(0, int(following["size"]) - delta)
+            else:
+                point["size"] = int(following["size"])
+
+
 def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
     relevant = {
         "excluded_folders": config["excluded_folders"],
@@ -621,9 +647,10 @@ def process_history_diff(
     project_sizes = state["project_sizes"]
     if state.get("last_commit") and (
         "size_roots" not in state or "active_size_roots" not in state
+        or any("raw_size" not in point for point in state.get("size_points", []))
     ):
         raise ValueError(
-            "État de taille antérieur au suivi des racines actives ; "
+            "État de taille antérieur au suivi des racines actives et brutes ; "
             "lancez ./analyse.sh full."
         )
     size_roots = state.setdefault("size_roots", {})
@@ -933,24 +960,33 @@ def process_history_diff(
                     in root_transfers.items()
                     if transfer_project == project and source == active_root
                 ]
-                if current_root in started_size_roots.get(project, set()):
+                transfers_to_current = [
+                    characters
+                    for (transfer_project, _source, destination), characters
+                    in root_transfers.items()
+                    if transfer_project == project and destination == current_root
+                ]
+                if transfers_to_current:
                     active_root = current_root
                 elif transfers_from_active:
                     _, active_root = max(transfers_from_active)
-                elif started_size_roots.get(project):
-                    active_root = max(
-                        started_size_roots[project],
-                        key=lambda root: int(roots.get(root, 0)),
-                    )
                 elif not active_root or int(roots.get(active_root, 0)) == 0:
-                    nonempty_roots = [
-                        root for root, size in roots.items() if int(size) > 0
-                    ]
-                    active_root = (
-                        max(nonempty_roots, key=lambda root: int(roots[root]))
-                        if nonempty_roots
-                        else current_root
-                    )
+                    started = started_size_roots.get(project, set())
+                    if current_root in started and int(roots.get(current_root, 0)) > 0:
+                        active_root = current_root
+                    elif started:
+                        active_root = max(
+                            started, key=lambda root: int(roots.get(root, 0))
+                        )
+                    else:
+                        nonempty_roots = [
+                            root for root, size in roots.items() if int(size) > 0
+                        ]
+                        active_root = (
+                            max(nonempty_roots, key=lambda root: int(roots[root]))
+                            if nonempty_roots
+                            else current_root
+                        )
                 active_size_roots[project] = active_root
                 project_sizes[project] = int(roots.get(active_root, 0))
 
@@ -1063,9 +1099,13 @@ def process_history_diff(
                         for historical_size in size_history:
                             if historical_size["timestamp"] <= point["timestamp"]:
                                 effective_size = int(historical_size["size"])
-                        point["size"] = max(0, int(point["size"]) - effective_size)
-                        fingerprints.update_project_commit_size(
-                            point["commit"], point["project"], point["size"]
+                        point["raw_size"] = max(
+                            0,
+                            int(point.get("raw_size", point["size"])) - effective_size,
+                        )
+                        point["size"] = point["raw_size"]
+                        fingerprints.update_project_commit_raw_size(
+                            point["commit"], point["project"], point["raw_size"]
                         )
 
             known_hashes, source_by_hash = fingerprints.original_sources(commit_added_hashes)
@@ -1280,6 +1320,7 @@ def process_history_diff(
                     "project": project,
                     "size_root": active_root,
                     "size": logical_size,
+                    "raw_size": logical_size,
                     "touched": project in work,
                 })
                 project_commit_snapshots.append((
@@ -1291,6 +1332,11 @@ def process_history_diff(
             fingerprints.record_project_commits(commit.sha, project_commit_snapshots)
             state["last_commit"] = commit.sha
             progress.update(display_index)
+        normalize_size_history(size_points)
+        fingerprints.update_project_commit_logical_sizes(
+            (int(point["size"]), point["commit"], point["project"])
+            for point in size_points
+        )
         # Les candidats créés pendant cette exécution doivent tous être jugés.
         # Pour une mise à jour incrémentale, un ancien candidat ne peut changer
         # de verdict que si l'un de ses fingerprints vient de réapparaître : on

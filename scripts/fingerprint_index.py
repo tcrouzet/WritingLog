@@ -102,6 +102,7 @@ class FingerprintIndex:
                 commit_hash TEXT NOT NULL,
                 project TEXT NOT NULL,
                 size INTEGER NOT NULL,
+                raw_size INTEGER NOT NULL,
                 size_root TEXT,
                 touched INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(commit_hash, project),
@@ -378,20 +379,34 @@ class FingerprintIndex:
     ) -> None:
         """Enregistre l'état de chaque projet à ce commit, touché ou non."""
         self.connection.executemany(
-            "INSERT INTO project_commits(commit_hash, project, size, size_root, touched) "
-            "VALUES(?, ?, ?, ?, ?) ON CONFLICT(commit_hash, project) DO UPDATE SET "
-            "size=excluded.size, size_root=excluded.size_root, touched=excluded.touched",
+            "INSERT INTO project_commits"
+            "(commit_hash, project, size, raw_size, size_root, touched) "
+            "VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(commit_hash, project) DO UPDATE SET "
+            "size=excluded.size, raw_size=excluded.raw_size, "
+            "size_root=excluded.size_root, touched=excluded.touched",
             (
-                (commit_hash, project, int(size), size_root, int(touched))
+                (commit_hash, project, int(size), int(size), size_root, int(touched))
                 for project, size, size_root, touched in snapshots
             ),
         )
 
-    def update_project_commit_size(self, commit_hash: str, project: str, size: int) -> None:
+    def update_project_commit_raw_size(
+        self, commit_hash: str, project: str, size: int
+    ) -> None:
         """Répercute une correction rétroactive dans la série relationnelle."""
         self.connection.execute(
+            "UPDATE project_commits SET size = ?, raw_size = ? "
+            "WHERE commit_hash = ? AND project = ?",
+            (int(size), int(size), commit_hash, project),
+        )
+
+    def update_project_commit_logical_sizes(
+        self, snapshots: Iterable[tuple[int, str, str]]
+    ) -> None:
+        """Écrit les tailles raccordées sans altérer les mesures physiques brutes."""
+        self.connection.executemany(
             "UPDATE project_commits SET size = ? WHERE commit_hash = ? AND project = ?",
-            (int(size), commit_hash, project),
+            ((int(size), commit_hash, project) for size, commit_hash, project in snapshots),
         )
 
     def last_processed_commit(self) -> str | None:

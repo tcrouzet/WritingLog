@@ -2514,7 +2514,7 @@
     "periode": "2026-W11",
     "projet": "tcrouzet",
     "signes_reels": 66881,
-    "signes_supprimes": 9942,
+    "signes_supprimes": 9724,
     "dossiers": [
       "tcrouzet"
     ]
@@ -2540,11 +2540,9 @@
   {
     "periode": "2026-W14",
     "projet": "Isa",
-    "signes_reels": 414,
+    "signes_reels": 0,
     "signes_supprimes": 1,
     "dossiers": [
-      "Zone/manuscrit",
-      "Zone/manuscritV1",
       "Zone/manuscritv2"
     ]
   },
@@ -2552,7 +2550,7 @@
     "periode": "2026-W14",
     "projet": "tcrouzet",
     "signes_reels": 22328,
-    "signes_supprimes": 4512,
+    "signes_supprimes": 3809,
     "dossiers": [
       "tcrouzet"
     ]
@@ -2561,7 +2559,7 @@
     "periode": "2026-W15",
     "projet": "Isa",
     "signes_reels": 27426,
-    "signes_supprimes": 1258,
+    "signes_supprimes": 1169,
     "dossiers": [
       "Zone/Maison",
       "Zone/manuscritv2"
@@ -2580,7 +2578,7 @@
     "periode": "2026-W15",
     "projet": "tcrouzet",
     "signes_reels": 45791,
-    "signes_supprimes": 10781,
+    "signes_supprimes": 9523,
     "dossiers": [
       "tcrouzet"
     ]
@@ -2588,7 +2586,7 @@
   {
     "periode": "2026-W16",
     "projet": "Isa",
-    "signes_reels": 12148,
+    "signes_reels": 12140,
     "signes_supprimes": 2592,
     "dossiers": [
       "Isa",
@@ -2655,7 +2653,7 @@
     "periode": "2026-W18",
     "projet": "tcrouzet",
     "signes_reels": 8763,
-    "signes_supprimes": 4565,
+    "signes_supprimes": 3388,
     "dossiers": [
       "tcrouzet"
     ]
@@ -3158,7 +3156,7 @@
   {
     "periode": "2026-W36",
     "projet": "Isa",
-    "signes_reels": 14671,
+    "signes_reels": 13696,
     "signes_supprimes": 0,
     "dossiers": [
       "Isa",
@@ -3177,8 +3175,8 @@
   {
     "periode": "2026-W37",
     "projet": "Isa",
-    "signes_reels": 25496,
-    "signes_supprimes": 2220,
+    "signes_reels": 43428,
+    "signes_supprimes": 9296,
     "dossiers": [
       "Isa",
       "Isa/manuscrit"
@@ -3187,8 +3185,44 @@
   {
     "periode": "2026-W37",
     "projet": "tcrouzet",
-    "signes_reels": 762,
+    "signes_reels": 12285,
+    "signes_supprimes": 1847,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-W38",
+    "projet": "727",
+    "signes_reels": 8291,
+    "signes_supprimes": 2495,
+    "dossiers": [
+      "727"
+    ]
+  },
+  {
+    "periode": "2026-W38",
+    "projet": "BornToBike",
+    "signes_reels": 340,
     "signes_supprimes": 0,
+    "dossiers": [
+      "BornToBike"
+    ]
+  },
+  {
+    "periode": "2026-W38",
+    "projet": "Isa",
+    "signes_reels": 28220,
+    "signes_supprimes": 14726,
+    "dossiers": [
+      "Isa/manuscrit"
+    ]
+  },
+  {
+    "periode": "2026-W38",
+    "projet": "tcrouzet",
+    "signes_reels": 370,
+    "signes_supprimes": 14,
     "dossiers": [
       "tcrouzet"
     ]

@@ -167,6 +167,7 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
             "commit": point["commit"],
             "projet": point["project"],
             "taille_signes": int(point["size"]),
+            "taille_brute": int(point.get("raw_size", point["size"])),
             "modifie": bool(point.get("touched", False)),
         }
         for point in sorted(
@@ -308,7 +309,7 @@ def main() -> int:
             ).fetchone()
             project_commit_rows = database.execute(
                 "SELECT c.commit_timestamp, pc.commit_hash, pc.project, pc.size, "
-                "pc.size_root, pc.touched FROM project_commits AS pc "
+                "pc.raw_size, pc.size_root, pc.touched FROM project_commits AS pc "
                 "JOIN commits AS c ON c.commit_hash = pc.commit_hash "
                 "ORDER BY c.rowid, pc.project"
             ).fetchall()
@@ -325,10 +326,11 @@ def main() -> int:
             "commit": commit_hash,
             "project": project,
             "size": int(size),
+            "raw_size": int(raw_size),
             "size_root": size_root,
             "touched": bool(touched),
         }
-        for timestamp, commit_hash, project, size, size_root, touched
+        for timestamp, commit_hash, project, size, raw_size, size_root, touched
         in project_commit_rows
     ]
     exports = aggregate(state, state.get("project_metadata", {}))

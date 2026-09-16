@@ -2,20 +2,20 @@
   {
     "id": "727",
     "title": "727",
-    "signes_reels_total": 140050,
-    "signes_supprimes_total": 3250,
-    "taille_actuelle": 179639,
+    "signes_reels_total": 148341,
+    "signes_supprimes_total": 5745,
+    "taille_actuelle": 186008,
     "date_creation": "2026-08-02T15:54:41+02:00",
-    "derniere_activite": "2026-09-04T17:46:40+02:00"
+    "derniere_activite": "2026-09-15T15:56:57+02:00"
   },
   {
     "id": "BornToBike",
     "title": "BornToBike",
-    "signes_reels_total": 79626,
+    "signes_reels_total": 79966,
     "signes_supprimes_total": 6314,
-    "taille_actuelle": 3149952,
+    "taille_actuelle": 3150290,
     "date_creation": "2024-01-02T17:14:48+01:00",
-    "derniere_activite": "2026-09-03T06:04:19+02:00"
+    "derniere_activite": "2026-09-15T21:38:19+02:00"
   },
   {
     "id": "Carnets",
@@ -57,11 +57,11 @@
       "Isa/archives/manuscritV1"
     ],
     "id": "Isa",
-    "signes_reels_total": 578321,
-    "signes_supprimes_total": 130072,
-    "taille_actuelle": 338747,
+    "signes_reels_total": 623076,
+    "signes_supprimes_total": 151785,
+    "taille_actuelle": 383300,
     "date_creation": "2025-08-02T10:38:31+02:00",
-    "derniere_activite": "2026-09-11T08:00:51+02:00"
+    "derniere_activite": "2026-09-16T11:19:05+02:00"
   },
   {
     "id": "L'atelier d'écriture",
@@ -121,10 +121,10 @@
   {
     "id": "tcrouzet",
     "title": "tcrouzet",
-    "signes_reels_total": 8996780,
-    "signes_supprimes_total": 1486440,
-    "taille_actuelle": 15845373,
+    "signes_reels_total": 9008673,
+    "signes_supprimes_total": 1484945,
+    "taille_actuelle": 15856212,
     "date_creation": "2024-04-18T18:48:49+02:00",
-    "derniere_activite": "2026-09-08T12:42:20+02:00"
+    "derniere_activite": "2026-09-16T10:18:48+02:00"
   }
 ]
