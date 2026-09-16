@@ -139,12 +139,14 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
                 f"davantage que les {historical_added_total} signes ajoutés.",
                 file=sys.stderr,
             )
+        active_size_root = state.get("active_size_roots", {}).get(project)
         excluded_size = sum(
             int(active.get("size", 0))
             for lifecycle in state.get("file_lifecycles", {}).values()
             if (active := lifecycle.get("active_creation"))
             and active.get("project") == project
             and active.get("excluded_from_size")
+            and active.get("size_root") == active_size_root
         )
         projects.append({
             **custom,
@@ -159,17 +161,19 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
             "derniere_activite": project_events[-1]["timestamp"] if project_events else None,
         })
 
-    daily_sizes: dict[tuple[str, str], int] = {}
-    for point in sorted(
-        state.get("size_points", []),
-        key=lambda item: (item["timestamp"], item["commit"], item["project"]),
-    ):
-        day = datetime.fromisoformat(point["timestamp"]).date().isoformat()
-        daily_sizes[(day, point["project"])] = int(point["size"])
     sizes = [
-        {"date": day, "projet": project, "taille_signes": size}
-        for (day, project), size in sorted(daily_sizes.items())
-        if project in active_projects
+        {
+            "date": point["timestamp"],
+            "commit": point["commit"],
+            "projet": point["project"],
+            "taille_signes": int(point["size"]),
+            "modifie": bool(point.get("touched", False)),
+        }
+        for point in sorted(
+            state.get("size_points", []),
+            key=lambda item: (item["timestamp"], item["commit"], item["project"]),
+        )
+        if point["project"] in active_projects
     ]
 
     total_real = sum(project["signes_reels_total"] for project in projects)
@@ -302,6 +306,12 @@ def main() -> int:
             row = database.execute(
                 "SELECT payload FROM analysis_state WHERE id = 1"
             ).fetchone()
+            project_commit_rows = database.execute(
+                "SELECT c.commit_timestamp, pc.commit_hash, pc.project, pc.size, "
+                "pc.size_root, pc.touched FROM project_commits AS pc "
+                "JOIN commits AS c ON c.commit_hash = pc.commit_hash "
+                "ORDER BY c.rowid, pc.project"
+            ).fetchall()
     except (OSError, sqlite3.Error) as exc:
         print(f"Impossible de lire l'état analytique : {exc}", file=sys.stderr)
         return 1
@@ -309,6 +319,18 @@ def main() -> int:
         print("État analytique absent de SQLite. Lancez ./analyse.sh full.", file=sys.stderr)
         return 1
     state = json.loads(row[0])
+    state["size_points"] = [
+        {
+            "timestamp": timestamp,
+            "commit": commit_hash,
+            "project": project,
+            "size": int(size),
+            "size_root": size_root,
+            "touched": bool(touched),
+        }
+        for timestamp, commit_hash, project, size, size_root, touched
+        in project_commit_rows
+    ]
     exports = aggregate(state, state.get("project_metadata", {}))
     data_directory = output / "data"
     data_directory.mkdir(parents=True, exist_ok=True)

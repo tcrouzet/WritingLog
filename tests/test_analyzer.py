@@ -138,6 +138,28 @@ output_dir: site
         self.assertTrue((self.root / "site" / "data" / "projects.json").exists())
         self.assertFalse((self.root / "site" / "data" / "state.json").exists())
 
+    def test_project_commits_contains_unchanged_snapshot_for_every_global_commit(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "chapter.md").write_text("manuscrit stable", encoding="utf-8")
+        self.commit("project appears", "2026-01-01T10:00:00+01:00")
+
+        (self.vault / "unrelated.json").write_text("{}", encoding="utf-8")
+        self.commit("unrelated vault commit", "2026-01-01T10:15:00+01:00")
+
+        self.analyze("full")
+        with sqlite3.connect(self.root / ".cache" / "fingerprints.sqlite3") as database:
+            self.assertEqual(database.execute("SELECT count(*) FROM commits").fetchone()[0], 2)
+            rows = database.execute(
+                "SELECT size, touched FROM project_commits "
+                "WHERE project='Alpha' ORDER BY rowid"
+            ).fetchall()
+        self.assertEqual(rows, [(len("manuscrit stable"), 1), (len("manuscrit stable"), 0)])
+        exported = self.load("size_evolution.json")
+        self.assertEqual(len(exported), 2)
+        self.assertTrue(all("T" in row["date"] and row["commit"] for row in exported))
+        self.assertEqual([row["modifie"] for row in exported], [True, False])
+
         web = subprocess.run(
             [
                 sys.executable,
@@ -477,7 +499,7 @@ output_dir: site
             for row in self.load("size_evolution.json")
             if row["projet"] == "Alpha"
         ]
-        self.assertEqual(sizes, [len("texte durable")] * 2)
+        self.assertEqual(sizes, [len("texte durable")] * 3)
         database = sqlite3.connect(self.root / ".cache" / "fingerprints.sqlite3")
         try:
             count = database.execute(
@@ -939,7 +961,7 @@ output_dir: site
             for row in self.load("size_evolution.json")
             if row["projet"] == "Alpha"
         ]
-        self.assertEqual(sizes, [len(original), 0])
+        self.assertEqual(sizes, [len(original), 0, 0])
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
         self.assertEqual(project["taille_actuelle"], 0)
         last_event = next(
@@ -974,6 +996,42 @@ output_dir: site
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
         self.assertEqual(project["taille_actuelle"], len(current))
 
+    def test_new_manuscript_root_replaces_previous_root_in_size_curve(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "Alpha:\n"
+            "  title: Premier projet\n"
+            "  folder: Alpha/manuscrit\n"
+            "  history_folders: [Alpha/v1, Alpha/v2]\n",
+            encoding="utf-8",
+        )
+        version_one = self.vault / "Alpha" / "v1"
+        version_one.mkdir(parents=True)
+        first_text = self.text(5000, seed=212)
+        (version_one / "chapter.md").write_text(first_text, encoding="utf-8")
+        self.commit("version one", "2026-01-01T10:00:00+01:00")
+
+        version_two = self.vault / "Alpha" / "v2"
+        version_two.mkdir(parents=True)
+        second_text = self.text(4800, seed=213)
+        second_path = version_two / "chapter.md"
+        second_path.write_text(second_text, encoding="utf-8")
+        self.commit("version two coexists with v1", "2026-01-02T10:00:00+01:00")
+
+        current = self.vault / "Alpha" / "manuscrit"
+        current.mkdir(parents=True)
+        final_text = second_text + self.text(100, seed=214)
+        second_path.rename(current / "chapter.md")
+        (current / "chapter.md").write_text(final_text, encoding="utf-8")
+        self.commit("version two becomes current", "2026-01-03T10:00:00+01:00")
+
+        self.analyze("full")
+        sizes = [
+            row["taille_signes"]
+            for row in self.load("size_evolution.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(sizes, [len(first_text), len(second_text), len(final_text)])
+
     def test_exact_unique_file_renamed_then_deleted_is_removed_from_history(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
@@ -990,16 +1048,19 @@ output_dir: site
         self.commit("export renamed", "2026-01-03T10:00:00+01:00")
         second_name.unlink()
         self.commit("same export disappears", "2026-01-04T10:00:00+01:00")
+        durable_after = durable + self.text(100, seed=215)
+        (manuscript / "chapter.md").write_text(durable_after, encoding="utf-8")
+        self.commit("write after export deletion", "2026-01-05T10:00:00+01:00")
 
         self.analyze("full")
         project = next(item for item in self.load("projects.json") if item["id"] == "Alpha")
-        self.assertEqual(project["signes_reels_total"], len(durable))
+        self.assertEqual(project["signes_reels_total"], len(durable_after))
         sizes = [
             row["taille_signes"]
             for row in self.load("size_evolution.json")
             if row["projet"] == "Alpha"
         ]
-        self.assertEqual(sizes, [len(durable)] * 4)
+        self.assertEqual(sizes, [len(durable)] * 4 + [len(durable_after)])
 
     def test_edited_add_delete_pair_is_treated_as_a_rename(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"

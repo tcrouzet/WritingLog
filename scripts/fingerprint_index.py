@@ -70,6 +70,7 @@ class FingerprintIndex:
                 "DROP TABLE IF EXISTS active_file_hashes; "
                 "DROP TABLE IF EXISTS fingerprint_origins; "
                 "DROP TABLE IF EXISTS fingerprints; "
+                "DROP TABLE IF EXISTS project_commits; "
                 "DROP TABLE IF EXISTS commits; "
                 "DROP TABLE IF EXISTS analysis_state; "
                 "DROP TABLE IF EXISTS web_data;"
@@ -97,6 +98,17 @@ class FingerprintIndex:
                 commit_timestamp TEXT NOT NULL,
                 processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS project_commits (
+                commit_hash TEXT NOT NULL,
+                project TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                size_root TEXT,
+                touched INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(commit_hash, project),
+                FOREIGN KEY(commit_hash) REFERENCES commits(commit_hash)
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_commits_project
+                ON project_commits(project, commit_hash);
             CREATE TABLE IF NOT EXISTS fingerprint_origins (
                 hash TEXT PRIMARY KEY,
                 project TEXT NOT NULL,
@@ -133,7 +145,7 @@ class FingerprintIndex:
         self.connection.executescript(
             "DELETE FROM deletion_candidate_hashes; DELETE FROM active_file_hashes; "
             "DELETE FROM fingerprint_origins; DELETE FROM fingerprints; "
-            "DELETE FROM commits; DELETE FROM analysis_state;"
+            "DELETE FROM project_commits; DELETE FROM commits; DELETE FROM analysis_state;"
         )
 
     def load_analysis_state(self) -> dict | None:
@@ -357,6 +369,29 @@ class FingerprintIndex:
         self.connection.execute(
             "INSERT OR IGNORE INTO commits(commit_hash, commit_timestamp) VALUES(?, ?)",
             (commit_hash, commit_timestamp),
+        )
+
+    def record_project_commits(
+        self,
+        commit_hash: str,
+        snapshots: Iterable[tuple[str, int, str | None, bool]],
+    ) -> None:
+        """Enregistre l'état de chaque projet à ce commit, touché ou non."""
+        self.connection.executemany(
+            "INSERT INTO project_commits(commit_hash, project, size, size_root, touched) "
+            "VALUES(?, ?, ?, ?, ?) ON CONFLICT(commit_hash, project) DO UPDATE SET "
+            "size=excluded.size, size_root=excluded.size_root, touched=excluded.touched",
+            (
+                (commit_hash, project, int(size), size_root, int(touched))
+                for project, size, size_root, touched in snapshots
+            ),
+        )
+
+    def update_project_commit_size(self, commit_hash: str, project: str, size: int) -> None:
+        """Répercute une correction rétroactive dans la série relationnelle."""
+        self.connection.execute(
+            "UPDATE project_commits SET size = ? WHERE commit_hash = ? AND project = ?",
+            (int(size), commit_hash, project),
         )
 
     def last_processed_commit(self) -> str | None:

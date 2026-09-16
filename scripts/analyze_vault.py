@@ -450,6 +450,27 @@ def configured_size_paths(metadata: dict[str, Any]) -> dict[str, list[tuple[str,
     return size_paths
 
 
+def size_location_for(
+    path: str | None,
+    extensions: set[str],
+    excluded: set[str],
+    size_paths: dict[str, list[tuple[str, ...]]],
+) -> tuple[str | None, str | None]:
+    """Retourne le projet et la racine de version contenant réellement le fichier."""
+    if not path or PurePosixPath(path).suffix.lower() not in extensions:
+        return None, None
+    parts = PurePosixPath(path).parts
+    folded = tuple(part.casefold() for part in parts)
+    for project, locations in size_paths.items():
+        for location in locations:
+            if folded[: len(location)] == location:
+                return project, "/".join(location)
+    project = project_for(path, extensions, excluded, size_paths)
+    if not project:
+        return None, None
+    return project, folded[0]
+
+
 def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
     relevant = {
         "excluded_folders": config["excluded_folders"],
@@ -494,6 +515,8 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "last_commit": None,
         "files": {},
         "project_sizes": {},
+        "size_roots": {},
+        "active_size_roots": {},
         "events": [],
         "size_points": [],
         "archive_moves": {},
@@ -585,11 +608,26 @@ def process_history_diff(
     excluded = {str(folder).strip("/").casefold() for folder in config["excluded_folders"]}
     history_paths = configured_project_paths(metadata, include_history=True)
     size_paths = configured_size_paths(metadata)
+    current_size_roots = {
+        project: "/".join(locations[0])
+        for project, locations in configured_project_paths(
+            metadata, include_history=False
+        ).items()
+    }
     gram_chars = int(config["internal_detection"]["gram_chars"])
     selection_chars = int(config["internal_detection"]["selection_chars"])
     overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
     files = state["files"]
     project_sizes = state["project_sizes"]
+    if state.get("last_commit") and (
+        "size_roots" not in state or "active_size_roots" not in state
+    ):
+        raise ValueError(
+            "État de taille antérieur au suivi des racines actives ; "
+            "lancez ./analyse.sh full."
+        )
+    size_roots = state.setdefault("size_roots", {})
+    active_size_roots = state.setdefault("active_size_roots", {})
     events = state["events"]
     size_points = state["size_points"]
     archive_moves = state["archive_moves"]
@@ -598,12 +636,14 @@ def process_history_diff(
 
     def active_excluded_size(project: str) -> int:
         """Taille des seules compilations actuellement présentes."""
+        active_root = active_size_roots.get(project)
         return sum(
             int(active.get("size", 0))
             for lifecycle in file_lifecycles.values()
             if (active := lifecycle.get("active_creation"))
             and active.get("project") == project
             and active.get("excluded_from_size")
+            and active.get("size_root") == active_root
         )
     first_new_deletion_candidate = len(deletion_candidates)
     run_added_hashes: set[str] = set()
@@ -646,6 +686,8 @@ def process_history_diff(
             change_records: list[dict[str, Any]] = []
             commit_added_hashes: list[str] = []
             pending_compilation_deletions: list[dict[str, Any]] = []
+            started_size_roots: dict[str, set[str]] = defaultdict(set)
+            root_transfers: dict[tuple[str, str, str], int] = defaultdict(int)
 
             commit_changes = infer_edited_renames(
                 commit.sha,
@@ -732,25 +774,12 @@ def process_history_diff(
                 new_project = project_for(new_path, extensions, excluded, history_paths)
                 if not new_project and old_project and change.status in {"M", "R"}:
                     new_project = old_project
-                old_file = files.get(path_key(old_path), {}) if old_path else {}
-                old_size_project = project_for(
+                old_size_project, old_size_root = size_location_for(
                     old_path, extensions, excluded, size_paths
                 )
-                if not old_size_project and old_file.get("counts_toward_size"):
-                    old_size_project = old_file.get("project")
-                new_size_project = project_for(
+                new_size_project, new_size_root = size_location_for(
                     new_path, extensions, excluded, size_paths
                 )
-                if (
-                    not new_size_project
-                    and old_size_project
-                    and change.status in {"M", "R"}
-                    and new_path
-                    and "archives" not in {
-                        part.casefold() for part in PurePosixPath(new_path).parts
-                    }
-                ):
-                    new_size_project = old_size_project
                 old_folder = tracked_folder_for(old_path, old_project, history_paths)
                 new_folder = tracked_folder_for(new_path, new_project, history_paths)
                 if old_project and old_folder:
@@ -758,26 +787,41 @@ def process_history_diff(
                 if new_project and new_folder:
                     work[new_project]["folders"].add(new_folder)
 
-                if old_size_project and change.status != "C":
-                    project_sizes[old_size_project] = max(
+                if old_size_project and old_size_root and change.status != "C":
+                    roots = size_roots.setdefault(old_size_project, {})
+                    roots[old_size_root] = max(
                         0,
-                        int(project_sizes.get(old_size_project, 0)) - len(old_text),
+                        int(roots.get(old_size_root, 0)) - len(old_text),
                     )
                     touched_sizes.add(old_size_project)
                     if old_path:
                         files.pop(path_key(old_path), None)
                 elif old_project and change.status != "C" and old_path:
                     files.pop(path_key(old_path), None)
-                if new_size_project:
-                    project_sizes[new_size_project] = (
-                        int(project_sizes.get(new_size_project, 0)) + len(new_text)
-                    )
+                if new_size_project and new_size_root:
+                    roots = size_roots.setdefault(new_size_project, {})
+                    previous_root_size = int(roots.get(new_size_root, 0))
+                    roots[new_size_root] = previous_root_size + len(new_text)
+                    if previous_root_size == 0 and new_text:
+                        started_size_roots[new_size_project].add(new_size_root)
                     touched_sizes.add(new_size_project)
+                if (
+                    change.status == "R"
+                    and old_size_project
+                    and new_size_project == old_size_project
+                    and old_size_root
+                    and new_size_root
+                    and old_size_root != new_size_root
+                ):
+                    root_transfers[
+                        (old_size_project, old_size_root, new_size_root)
+                    ] += len(new_text)
                 if new_project:
                     files[path_key(new_path)] = {
                         "size": len(new_text),
                         "project": new_project,
                         "counts_toward_size": bool(new_size_project),
+                        "size_root": new_size_root,
                         "last_timestamp": commit.timestamp,
                     }
 
@@ -866,6 +910,7 @@ def process_history_diff(
                     "novel_chars": 0,
                     "internal_chars": 0,
                     "exclude_from_size": False,
+                    "size_root": new_size_root,
                 })
 
                 if old_project and change.status == "R" and new_path:
@@ -875,6 +920,39 @@ def process_history_diff(
                             "archive_folder": "/".join(parts[:2]),
                             "moved_at": commit.timestamp,
                         }
+
+            # Une seule racine représente le manuscrit à un instant donné.
+            # Les autres versions restent indexées mais ne sont jamais sommées.
+            for project in touched_sizes:
+                roots = size_roots.setdefault(project, {})
+                active_root = active_size_roots.get(project)
+                current_root = current_size_roots.get(project)
+                transfers_from_active = [
+                    (characters, destination)
+                    for (transfer_project, source, destination), characters
+                    in root_transfers.items()
+                    if transfer_project == project and source == active_root
+                ]
+                if current_root in started_size_roots.get(project, set()):
+                    active_root = current_root
+                elif transfers_from_active:
+                    _, active_root = max(transfers_from_active)
+                elif started_size_roots.get(project):
+                    active_root = max(
+                        started_size_roots[project],
+                        key=lambda root: int(roots.get(root, 0)),
+                    )
+                elif not active_root or int(roots.get(active_root, 0)) == 0:
+                    nonempty_roots = [
+                        root for root, size in roots.items() if int(size) > 0
+                    ]
+                    active_root = (
+                        max(nonempty_roots, key=lambda root: int(roots[root]))
+                        if nonempty_roots
+                        else current_root
+                    )
+                active_size_roots[project] = active_root
+                project_sizes[project] = int(roots.get(active_root, 0))
 
             for pending_deletion in pending_compilation_deletions:
                 active_creation = pending_deletion["active_creation"]
@@ -973,6 +1051,8 @@ def process_history_diff(
                         if (
                             point["project"] != active_creation["project"]
                             or point["timestamp"] < active_creation["timestamp"]
+                            or point["timestamp"] >= commit.timestamp
+                            or point.get("size_root") != active_creation.get("size_root")
                         ):
                             continue
                         effective_size = int(
@@ -984,6 +1064,9 @@ def process_history_diff(
                             if historical_size["timestamp"] <= point["timestamp"]:
                                 effective_size = int(historical_size["size"])
                         point["size"] = max(0, int(point["size"]) - effective_size)
+                        fingerprints.update_project_commit_size(
+                            point["commit"], point["project"], point["size"]
+                        )
 
             known_hashes, source_by_hash = fingerprints.original_sources(commit_added_hashes)
             run_added_hashes.update(commit_added_hashes)
@@ -1150,6 +1233,7 @@ def process_history_diff(
                     "project": record["new_project"],
                     "file_key": path_key(record["new_path"]),
                     "file_keys": [path_key(record["new_path"])],
+                    "size_root": record.get("size_root"),
                     "content_hash": content_hash(whole_added[0] if whole_added else ""),
                     "size": len(whole_added[0]) if whole_added else 0,
                     "size_history": [{
@@ -1176,17 +1260,35 @@ def process_history_diff(
 
             if work:
                 relevant_commits += 1
-            for project in sorted(touched_sizes):
+            # À partir de sa première apparition, chaque projet reçoit un point
+            # à chaque commit global, même si ce commit ne le touche pas. Les
+            # plateaux et la transition exacte responsable d'un saut restent
+            # ainsi visibles et auditables.
+            project_commit_snapshots: list[tuple[str, int, str | None, bool]] = []
+            for project in sorted(active_size_roots):
+                active_root = active_size_roots.get(project)
+                if not active_root:
+                    continue
+                logical_size = max(
+                    0,
+                    int(project_sizes.get(project, 0))
+                    - active_excluded_size(project),
+                )
                 size_points.append({
                     "timestamp": commit.timestamp,
                     "commit": commit.sha,
                     "project": project,
-                    "size": max(
-                        0,
-                        int(project_sizes.get(project, 0))
-                        - active_excluded_size(project),
-                    ),
+                    "size_root": active_root,
+                    "size": logical_size,
+                    "touched": project in work,
                 })
+                project_commit_snapshots.append((
+                    project,
+                    logical_size,
+                    active_root,
+                    project in work,
+                ))
+            fingerprints.record_project_commits(commit.sha, project_commit_snapshots)
             state["last_commit"] = commit.sha
             progress.update(display_index)
         # Les candidats créés pendant cette exécution doivent tous être jugés.

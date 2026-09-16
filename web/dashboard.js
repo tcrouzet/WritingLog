@@ -24,7 +24,7 @@
 
   function cutoffDate(period) {
     if (period === "all") return null;
-    const date = new Date(`${latestDate()}T12:00:00`);
+    const date = new Date(periodTimestamp(latestDate()));
     if (period === "30d") date.setDate(date.getDate() - 29);
     if (period === "6m") date.setMonth(date.getMonth() - 6);
     if (period === "1y") date.setFullYear(date.getFullYear() - 1);
@@ -59,7 +59,8 @@
       return monday.getTime();
     }
     if (/^\d{4}-\d{2}$/.test(period)) return Date.parse(`${period}-01T12:00:00Z`);
-    return Date.parse(`${period}T12:00:00Z`);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) return Date.parse(`${period}T12:00:00Z`);
+    return Date.parse(period);
   }
 
   function temporalAxis(rows, field = "periode") {
@@ -401,9 +402,15 @@
     const sizeDatasets = visibleProjects().map(project => {
       return {
         label: project.title,
-        data: sizes.filter(row => row.projet === project.id).map(row => ({ x: periodTimestamp(row.date), y: row.taille_signes })),
+        data: sizes.filter(row => row.projet === project.id).map(row => ({
+          x: periodTimestamp(row.date),
+          y: row.taille_signes,
+          timestamp: row.date,
+          commit: row.commit || "",
+          touched: Boolean(row.modifie)
+        })),
         borderColor: color(project.id),
-        pointRadius: sizes.length > 100 ? 0 : 2,
+        pointRadius: context => context.raw?.touched ? 1.75 : 0.5,
         pointHoverRadius: 5,
         spanGaps: false,
         stepped: "after",
@@ -412,6 +419,18 @@
     });
     const sizeOptions = commonOptions(false, sizeTemporal);
     sizeOptions.elements = { line: { borderWidth: 2 } };
+    sizeOptions.plugins.tooltip.callbacks = {
+      title: items => new Intl.DateTimeFormat("fr-FR", {
+        dateStyle: "long", timeStyle: "medium"
+      }).format(new Date(items[0].raw.timestamp)),
+      label: context => `Taille : ${formatter.format(context.raw.y)} signes`,
+      afterLabel: context => context.raw.commit
+        ? [
+            `Commit : ${context.raw.commit.slice(0, 12)}`,
+            context.raw.touched ? "Projet modifié" : "Taille inchangée"
+          ]
+        : "Valeur au début de la période"
+    };
     charts.size = new Chart(document.querySelector("#size-chart"), { type: "line", data: { datasets: sizeDatasets }, options: sizeOptions });
   }
 
