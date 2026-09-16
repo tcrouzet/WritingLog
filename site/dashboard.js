@@ -7,10 +7,13 @@
   const colors = new Map();
   const formatter = new Intl.NumberFormat("fr-FR");
   const storageKey = "writing-log-preferences-v1";
+  const zoomLevels = [1, 1.5, 2, 3, 4, 6];
   let data;
   let selectedProject = "all";
   let productionGranularity = "day";
-  const periods = { daily: "30d", size: "all" };
+  let sizeGranularity = "day";
+  const zooms = { daily: 1, size: 1 };
+  const weekdayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
   const title = id => data.projects.find(project => project.id === id)?.title || id;
   const color = id => {
@@ -22,28 +25,12 @@
     return values.at(-1) || new Date().toISOString().slice(0, 10);
   }
 
-  function cutoffDate(period) {
-    if (period === "all") return null;
-    const date = new Date(periodTimestamp(latestDate()));
-    if (period === "30d") date.setDate(date.getDate() - 29);
-    if (period === "6m") date.setMonth(date.getMonth() - 6);
-    if (period === "1y") date.setFullYear(date.getFullYear() - 1);
-    return date.toISOString().slice(0, 10);
-  }
-
   function isoWeek(dateString) {
     const date = new Date(`${dateString}T12:00:00Z`);
     date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
     const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
     const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
     return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-  }
-
-  function periodRows(rows, kind, period) {
-    const cutoff = cutoffDate(period);
-    if (!cutoff) return rows;
-    const boundary = kind === "week" ? isoWeek(cutoff) : kind === "month" ? cutoff.slice(0, 7) : cutoff;
-    return rows.filter(row => row.periode >= boundary);
   }
 
   function visibleProjects() {
@@ -177,14 +164,70 @@
       label: context => `Produits : ${formatter.format(context.raw.chars)} signes`,
       afterLabel: context => {
         const folders = context.raw.folders.length ? context.raw.folders.join(", ") : "—";
-        return `Dossier : ${folders}`;
+        return `Dossier analysé : ${folders}`;
       }
     };
     return new Chart(canvas, { type: "bar", data: { datasets }, options });
   }
 
-  function filteredDaily(period = "all") {
-    return periodRows(data.daily, "day", period).filter(row => selectedProject === "all" || row.projet === selectedProject);
+  function weekdayIndex(dateString) {
+    return (new Date(`${dateString}T12:00:00Z`).getUTCDay() + 6) % 7;
+  }
+
+  function weekdayOccurrences(firstDay, lastDay) {
+    const counts = Array(7).fill(0);
+    if (!firstDay || !lastDay || firstDay > lastDay) return counts;
+    const cursor = new Date(`${firstDay}T12:00:00Z`);
+    const end = new Date(`${lastDay}T12:00:00Z`);
+    while (cursor <= end) {
+      counts[(cursor.getUTCDay() + 6) % 7] += 1;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return counts;
+  }
+
+  function weekdayChart(canvas) {
+    const lastDay = latestDate().slice(0, 10);
+    const datasets = visibleProjects().map(project => {
+      const allRows = data.daily.filter(row => row.projet === project.id).sort((a, b) => a.periode.localeCompare(b.periode));
+      const projectStart = allRows[0]?.periode || lastDay;
+      const occurrences = weekdayOccurrences(projectStart, lastDay);
+      const totals = Array(7).fill(0);
+      const activeDays = Array(7).fill(0);
+      for (const row of allRows) {
+        const index = weekdayIndex(row.periode);
+        totals[index] += Number(row.signes_reels) || 0;
+        if (row.signes_reels > 0) activeDays[index] += 1;
+      }
+      return {
+        label: project.title,
+        data: totals.map((total, index) => ({
+          x: weekdayLabels[index],
+          y: total,
+          total,
+          occurrences: occurrences[index],
+          activeDays: activeDays[index],
+          average: occurrences[index] ? Math.round(total / occurrences[index]) : 0
+        })),
+        backgroundColor: color(project.id),
+        borderRadius: 2,
+        maxBarThickness: 90
+      };
+    });
+    const options = commonOptions(true);
+    options.plugins.tooltip.callbacks = {
+      title: items => items[0].raw.x,
+      label: context => `${context.dataset.label} : ${formatter.format(context.raw.total)} signes`,
+      afterLabel: context => [
+        `Moyenne : ${formatter.format(context.raw.average)} signes par ${context.raw.x.toLowerCase()}`,
+        `Jours actifs : ${formatter.format(context.raw.activeDays)} sur ${formatter.format(context.raw.occurrences)}`
+      ]
+    };
+    return new Chart(canvas, { type: "bar", data: { labels: weekdayLabels, datasets }, options });
+  }
+
+  function filteredDaily() {
+    return data.daily.filter(row => selectedProject === "all" || row.projet === selectedProject);
   }
 
   function renderCards(rows) {
@@ -194,8 +237,46 @@
 
   function savePreferences() {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, periods, productionGranularity }));
+      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, productionGranularity, sizeGranularity, zooms }));
     } catch (_) { /* Le dashboard reste utilisable si le stockage est désactivé. */ }
+  }
+
+  function applyChartZoom(name, keepCenter = false) {
+    const viewport = document.querySelector(`[data-chart-scroll="${name}"]`);
+    const stage = document.querySelector(`[data-chart-stage="${name}"]`);
+    if (!viewport || !stage) return;
+    const center = viewport.scrollWidth
+      ? (viewport.scrollLeft + viewport.clientWidth / 2) / viewport.scrollWidth
+      : 0.5;
+    stage.style.width = `${zooms[name] * 100}%`;
+    document.querySelectorAll(`[data-chart-zoom="${name}"]`).forEach(button => {
+      const limit = button.dataset.direction === "out" ? zoomLevels[0] : zoomLevels.at(-1);
+      button.disabled = zooms[name] === limit;
+    });
+    requestAnimationFrame(() => {
+      charts[name]?.resize();
+      if (keepCenter) {
+        viewport.scrollLeft = Math.max(0, center * viewport.scrollWidth - viewport.clientWidth / 2);
+      }
+    });
+  }
+
+  function changeChartZoom(name, direction) {
+    const current = zoomLevels.indexOf(zooms[name]);
+    const offset = direction === "in" ? 1 : -1;
+    const next = Math.max(0, Math.min(zoomLevels.length - 1, current + offset));
+    if (next === current) return;
+    zooms[name] = zoomLevels[next];
+    applyChartZoom(name, true);
+    savePreferences();
+  }
+
+  function installZoomButtons() {
+    document.querySelectorAll("[data-chart-zoom]").forEach(button => {
+      button.addEventListener("click", () => {
+        changeChartZoom(button.dataset.chartZoom, button.dataset.direction);
+      });
+    });
   }
 
   function safeFilename(value) {
@@ -373,31 +454,39 @@
     });
   }
 
-  function filteredSizes(period) {
-    const cutoff = cutoffDate(period);
+  function sizeRows(granularity) {
     const result = [];
     for (const project of visibleProjects()) {
       const rows = data.size_evolution.filter(row => row.projet === project.id).sort((a, b) => a.date.localeCompare(b.date));
-      if (!cutoff) {
-        result.push(...rows);
-        continue;
+      const buckets = new Map();
+      for (const row of rows) {
+        const day = row.date.slice(0, 10);
+        const bucket = granularity === "year"
+          ? day.slice(0, 4)
+          : granularity === "month"
+            ? day.slice(0, 7)
+            : granularity === "week" ? isoWeek(day) : day;
+        const previous = buckets.get(bucket);
+        buckets.set(bucket, {
+          ...row,
+          modifie: Boolean(row.modifie || previous?.modifie)
+        });
       }
-      const before = rows.filter(row => row.date < cutoff).at(-1);
-      if (before) result.push({ ...before, date: cutoff });
-      result.push(...rows.filter(row => row.date >= cutoff));
+      result.push(...buckets.values());
     }
     return result;
   }
 
   function render() {
     Object.values(charts).forEach(chart => chart.destroy());
-    renderCards(filteredDaily("all"));
+    renderCards(filteredDaily());
     const selectedTitle = document.querySelector("#selected-project-title");
     selectedTitle.hidden = selectedProject === "all";
     selectedTitle.textContent = selectedProject === "all" ? "" : title(selectedProject);
     const productionData = productionGranularity === "week" ? data.weekly : productionGranularity === "month" ? data.monthly : data.daily;
-    charts.daily = productionChart(document.querySelector("#daily-chart"), periodRows(productionData, productionGranularity, periods.daily), productionGranularity);
-    const sizes = filteredSizes(periods.size);
+    charts.daily = productionChart(document.querySelector("#daily-chart"), productionData, productionGranularity);
+    charts.weekday = weekdayChart(document.querySelector("#weekday-chart"));
+    const sizes = sizeRows(sizeGranularity);
     const sizeTemporal = temporalAxis(sizes, "date");
     const sizeDatasets = visibleProjects().map(project => {
       return {
@@ -408,6 +497,9 @@
           rawSize: row.taille_brute ?? row.taille_signes,
           timestamp: row.date,
           commit: row.commit || "",
+          sourceCommit: row.source_commit || "",
+          folder: row.dossier || "",
+          estimated: Boolean(row.estime),
           touched: Boolean(row.modifie)
         })),
         borderColor: color(project.id),
@@ -419,15 +511,21 @@
       };
     });
     const sizeOptions = commonOptions(false, sizeTemporal);
+    sizeOptions.scales.y.beginAtZero = false;
     sizeOptions.elements = { line: { borderWidth: 2 } };
     sizeOptions.plugins.tooltip.callbacks = {
       title: items => new Intl.DateTimeFormat("fr-FR", {
         dateStyle: "long", timeStyle: "medium"
       }).format(new Date(items[0].raw.timestamp)),
       label: context => `Taille : ${formatter.format(context.raw.y)} signes`,
-      afterLabel: context => context.raw.commit
+      afterLabel: context => context.raw.estimated
         ? [
+            `Estimation quotidienne vers le commit : ${context.raw.sourceCommit.slice(0, 12)}`,
+            `Dossier analysé : ${context.raw.folder || "—"}`
+          ]
+        : context.raw.commit ? [
             `Commit : ${context.raw.commit.slice(0, 12)}`,
+            `Dossier analysé : ${context.raw.folder || "—"}`,
             context.raw.touched ? "Projet modifié" : "Taille inchangée",
             ...(context.raw.rawSize !== context.raw.y
               ? [`Mesure brute : ${formatter.format(context.raw.rawSize)} signes`]
@@ -436,6 +534,8 @@
         : "Valeur au début de la période"
     };
     charts.size = new Chart(document.querySelector("#size-chart"), { type: "line", data: { datasets: sizeDatasets }, options: sizeOptions });
+    applyChartZoom("daily");
+    applyChartZoom("size");
   }
 
   async function start() {
@@ -454,9 +554,10 @@
         const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
         if (saved?.project === "all" || data.projects.some(project => project.id === saved?.project)) selectedProject = saved.project;
         if (["day", "week", "month"].includes(saved?.productionGranularity)) productionGranularity = saved.productionGranularity;
-        if (saved?.periods) {
-          for (const key of Object.keys(periods)) {
-            if (["30d", "6m", "1y", "all"].includes(saved.periods[key])) periods[key] = saved.periods[key];
+        if (["day", "week", "month", "year"].includes(saved?.sizeGranularity)) sizeGranularity = saved.sizeGranularity;
+        if (saved?.zooms) {
+          for (const key of Object.keys(zooms)) {
+            if (zoomLevels.includes(saved.zooms[key])) zooms[key] = saved.zooms[key];
           }
         }
       } catch (_) { /* Préférences absentes ou anciennes : conserver les valeurs par défaut. */ }
@@ -467,12 +568,12 @@
       const granularity = document.querySelector("#production-granularity");
       granularity.value = productionGranularity;
       granularity.addEventListener("change", event => { productionGranularity = event.target.value; savePreferences(); render(); });
-      document.querySelectorAll(".chart-range").forEach(select => {
-        select.value = periods[select.dataset.chart];
-        select.addEventListener("change", event => { periods[event.target.dataset.chart] = event.target.value; savePreferences(); render(); });
-      });
+      const sizeGranularitySelect = document.querySelector("#size-granularity");
+      sizeGranularitySelect.value = sizeGranularity;
+      sizeGranularitySelect.addEventListener("change", event => { sizeGranularity = event.target.value; savePreferences(); render(); });
       document.querySelector("#last-update").textContent = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" }).format(new Date(data.overview.derniere_mise_a_jour));
       render();
+      installZoomButtons();
       installDownloadButtons();
     } catch (error) {
       const box = document.querySelector("#error");

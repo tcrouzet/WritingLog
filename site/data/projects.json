@@ -48,17 +48,11 @@
     "title": "L'expérience humaine",
     "folder": "Isa/manuscrit",
     "history_folders": [
-      "Zone/manuscrit",
-      "Zone/manuscritV1",
-      "Zone/manuscritv2",
-      "Zone/Maison",
-      "Zone/archives/manuscritV1",
-      "Isa/Maison",
-      "Isa/archives/manuscritV1"
+      "Zone/manuscrit"
     ],
     "id": "Isa",
-    "signes_reels_total": 623076,
-    "signes_supprimes_total": 151785,
+    "signes_reels_total": 590206,
+    "signes_supprimes_total": 150363,
     "taille_actuelle": 383300,
     "date_creation": "2025-08-02T10:38:31+02:00",
     "derniere_activite": "2026-09-16T11:19:05+02:00"

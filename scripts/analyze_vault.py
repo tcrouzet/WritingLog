@@ -565,6 +565,11 @@ def load_state(
         state = index.load_analysis_state()
     if not state:
         raise ValueError("État d'analyse absent de SQLite ; lancez d'abord : ./analyse.sh full")
+    if state.get("last_commit") and "project_last_activity" in state:
+        raise ValueError(
+            "Les intervalles existants ont été calculés par projet ; "
+            "lancez ./analyse.sh full pour revenir aux commits globaux."
+        )
     # Vestige des anciens états versionnés : il n'intervient plus dans la
     # reprise incrémentale et disparaît à la prochaine écriture.
     state.pop("version", None)

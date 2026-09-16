@@ -25,6 +25,14 @@ main { width: min(1400px, 100%); margin: 0 auto; padding: 28px; }
 .panel header p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 .chart-range { min-width: 112px; padding-block: 7px; font-size: 12px; }
 .chart-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+.chart-zoom { display: inline-flex; }
+.chart-zoom button { appearance: none; width: 2.2rem; height: 2.2rem; padding: 0; border: 1px solid #cfc8c0; background: #fff; color: var(--ink); font: 20px/1 Arial, Helvetica, sans-serif; cursor: pointer; }
+.chart-zoom button:first-child { border-radius: .3125rem 0 0 .3125rem; }
+.chart-zoom button:last-child { margin-left: -1px; border-radius: 0 .3125rem .3125rem 0; }
+.chart-zoom button:hover:not(:disabled) { position: relative; border-color: #9aa0a6; background: #f8f9fa; }
+.chart-zoom button:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--blue); outline-offset: 1px; }
+.chart-zoom button:disabled { color: #bdc1c6; background: #f8f9fa; cursor: default; }
+.chart-scroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-gutter: stable; }
 .canvas-wrap { position: relative; height: 300px; }
 .canvas-wrap.tall { height: 420px; }
 .chart-download { appearance: none; flex: 0 0 auto; width: 2.2rem; height: 2.2rem; padding: .25rem; border: 1px solid #cfc8c0; border-radius: .3125rem; background: white url("assets/images/download-button.svg") center / 1.35rem no-repeat; color: transparent; cursor: pointer; }

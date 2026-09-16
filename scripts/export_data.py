@@ -49,6 +49,50 @@ def split_integer_over_days(value: int, days: list[str]) -> Iterable[tuple[str, 
         yield day, quotient + (1 if index >= first_extra else 0)
 
 
+def interpolate_size_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ajoute une estimation quotidienne entre deux instantanés Git espacés."""
+    by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_project[row["projet"]].append(row)
+
+    result: list[dict[str, Any]] = []
+    for project_rows in by_project.values():
+        project_rows.sort(key=lambda row: (row["date"], row.get("commit", "")))
+        previous: dict[str, Any] | None = None
+        for row in project_rows:
+            if previous is not None:
+                previous_at = datetime.fromisoformat(previous["date"])
+                current_at = datetime.fromisoformat(row["date"])
+                day_count = (current_at.date() - previous_at.date()).days
+                size_delta = int(row["taille_signes"]) - int(previous["taille_signes"])
+                raw_delta = int(row["taille_brute"]) - int(previous["taille_brute"])
+                if day_count > 1 and (size_delta or raw_delta):
+                    offsets = [str(offset) for offset in range(1, day_count + 1)]
+                    size_steps = dict(split_integer_over_days(size_delta, offsets))
+                    raw_steps = dict(split_integer_over_days(raw_delta, offsets))
+                    estimated_size = int(previous["taille_signes"])
+                    estimated_raw = int(previous["taille_brute"])
+                    for offset in range(1, day_count):
+                        key = str(offset)
+                        estimated_size += size_steps[key]
+                        estimated_raw += raw_steps[key]
+                        estimated_at = current_at - timedelta(days=day_count - offset)
+                        result.append({
+                            "date": estimated_at.isoformat(),
+                            "commit": "",
+                            "source_commit": row.get("commit", ""),
+                            "projet": row["projet"],
+                            "taille_signes": estimated_size,
+                            "taille_brute": estimated_raw,
+                            "dossier": previous.get("dossier"),
+                            "modifie": True,
+                            "estime": True,
+                        })
+            result.append(row)
+            previous = row
+    return sorted(result, key=lambda row: (row["date"], row.get("commit", ""), row["projet"]))
+
+
 def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
     events = sorted(
         state["events"],
@@ -161,14 +205,16 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
             "derniere_activite": project_events[-1]["timestamp"] if project_events else None,
         })
 
-    sizes = [
+    raw_sizes = [
         {
             "date": point["timestamp"],
             "commit": point["commit"],
             "projet": point["project"],
             "taille_signes": int(point["size"]),
             "taille_brute": int(point.get("raw_size", point["size"])),
+            "dossier": point.get("size_root"),
             "modifie": bool(point.get("touched", False)),
+            "estime": False,
         }
         for point in sorted(
             state.get("size_points", []),
@@ -176,6 +222,7 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
         )
         if point["project"] in active_projects
     ]
+    sizes = interpolate_size_rows(raw_sizes)
 
     total_real = sum(project["signes_reels_total"] for project in projects)
     total_deleted = sum(project["signes_supprimes_total"] for project in projects)

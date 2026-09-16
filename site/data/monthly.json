@@ -715,7 +715,7 @@
   {
     "periode": "2025-09",
     "projet": "Isa",
-    "signes_reels": 61115,
+    "signes_reels": 58733,
     "signes_supprimes": 15020,
     "dossiers": [
       "Zone/manuscrit"
@@ -977,19 +977,13 @@
   {
     "periode": "2026-04",
     "projet": "Isa",
-    "signes_reels": 99480,
-    "signes_supprimes": 14656,
+    "signes_reels": 68992,
+    "signes_supprimes": 13234,
     "dossiers": [
       "Isa",
-      "Isa/Maison",
-      "Isa/archives/manuscritV1",
       "Isa/manuscrit",
       "Zone",
-      "Zone/Maison",
-      "Zone/archives/manuscritV1",
-      "Zone/manuscrit",
-      "Zone/manuscritV1",
-      "Zone/manuscritv2"
+      "Zone/manuscrit"
     ]
   },
   {
@@ -1054,7 +1048,6 @@
     "signes_supprimes": 47684,
     "dossiers": [
       "Isa",
-      "Isa/archives/manuscritV1",
       "Isa/manuscrit"
     ]
   },

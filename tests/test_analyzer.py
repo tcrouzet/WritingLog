@@ -19,7 +19,7 @@ DATA_EXPORTER = ROOT / "scripts" / "export_data.py"
 WEB_BUILDER = ROOT / "scripts" / "web.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from analyze_vault import character_changes, classification_blocks, load_state
-from export_data import aggregate
+from export_data import aggregate, interpolate_size_rows
 from fingerprint_index import FingerprintIndex
 
 
@@ -214,6 +214,7 @@ output_dir: site
         # Tous les commits sont du même jour : la courbe conserve la dernière
         # taille physique, indépendamment des signes classés comme produits.
         self.assertEqual(alpha_curve[-1]["taille_signes"], 10)
+        self.assertEqual(alpha_curve[-1]["dossier"], "alpha/manuscrit")
         state = self.load("state.json")
         self.assertEqual(
             sum(event["import_chars"] for event in state["events"] if event["project"] == "Alpha"),
@@ -419,8 +420,9 @@ output_dir: site
         event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
         self.assertEqual(event["real_chars"], len(imported))
         self.assertEqual(event["import_chars"], 0)
+        self.assertEqual(event["interval_start"], "2026-01-01T10:10:00+01:00")
 
-    def test_recent_unrelated_commit_does_not_turn_new_text_into_import(self) -> None:
+    def test_recent_unrelated_commit_sets_the_global_interval(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
         manuscript.mkdir(parents=True)
         observed = self.text(401, seed=20)
@@ -444,6 +446,37 @@ output_dir: site
         event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
         self.assertEqual(event["real_chars"], len(imported))
         self.assertEqual(event["import_chars"], 0)
+        self.assertEqual(event["interval_start"], "2026-01-05T09:55:00+01:00")
+
+    def test_incremental_restores_the_last_global_commit_timestamp(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        note = manuscript / "chapter.md"
+        note.write_text("début", encoding="utf-8")
+        self.commit("alpha start", "2026-01-01T10:00:00+01:00")
+        self.analyze("full")
+
+        unrelated = self.vault / "Beta"
+        unrelated.mkdir()
+        (unrelated / "note.md").write_text("ailleurs", encoding="utf-8")
+        self.commit("unrelated beta work", "2026-01-03T10:00:00+01:00")
+        note.write_text("début puis reprise", encoding="utf-8")
+        self.commit("alpha resumes", "2026-01-05T10:00:00+01:00")
+        self.analyze()
+
+        state = self.load("state.json")
+        event = next(item for item in state["events"] if item["commit"] == state["last_commit"])
+        self.assertEqual(event["interval_start"], "2026-01-03T10:00:00+01:00")
+        rows = {
+            row["periode"]: row["signes_reels"]
+            for row in self.load("daily.json")
+            if row["projet"] == "Alpha"
+        }
+        quotient, remainder = divmod(event["real_chars"], 2)
+        self.assertNotIn("2026-01-02", rows)
+        self.assertNotIn("2026-01-03", rows)
+        self.assertEqual(rows["2026-01-04"], quotient)
+        self.assertEqual(rows["2026-01-05"], quotient + remainder)
 
     def test_incremental_ignores_legacy_state_version(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
@@ -476,6 +509,24 @@ output_dir: site
         result = self.analyze()
         self.assertEqual(result.returncode, 0)
         self.assertNotIn("version", self.load("state.json"))
+
+    def test_project_interval_state_requires_full_rebuild(self) -> None:
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        (manuscript / "start.md").write_text("début", encoding="utf-8")
+        self.commit("start", "2026-01-01T10:00:00+01:00")
+        self.analyze("full")
+
+        database_path = self.root / ".cache" / "fingerprints.sqlite3"
+        with FingerprintIndex(database_path) as database:
+            state = database.load_analysis_state()
+            state["project_last_activity"] = {"Alpha": "2026-01-01T10:00:00+01:00"}
+            database.save_analysis(state)
+            database.commit()
+
+        result = self.analyze(expect_success=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("./analyse.sh full", result.stderr)
 
     def test_disappeared_fingerprints_remain_indexed(self) -> None:
         manuscript = self.vault / "Alpha" / "manuscrit"
@@ -668,6 +719,38 @@ output_dir: site
             if row["projet"] == "Alpha"
         ]
         self.assertEqual(sizes, [100, 150, 120])
+
+    def test_size_export_interpolates_each_day_between_global_commits(self) -> None:
+        rows = interpolate_size_rows([
+            {
+                "date": "2026-09-04T17:46:40+02:00",
+                "commit": "before",
+                "projet": "Alpha",
+                "taille_signes": 100,
+                "taille_brute": 110,
+                "dossier": "alpha/manuscrit",
+                "modifie": False,
+                "estime": False,
+            },
+            {
+                "date": "2026-09-08T12:42:20+02:00",
+                "commit": "after",
+                "projet": "Alpha",
+                "taille_signes": 140,
+                "taille_brute": 150,
+                "dossier": "alpha/manuscrit",
+                "modifie": True,
+                "estime": False,
+            },
+        ])
+
+        self.assertEqual(
+            [row["date"][:10] for row in rows],
+            ["2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"],
+        )
+        self.assertEqual([row["taille_signes"] for row in rows], [100, 110, 120, 130, 140])
+        self.assertEqual([row["estime"] for row in rows], [False, True, True, True, False])
+        self.assertTrue(all(row.get("source_commit") == "after" for row in rows[1:4]))
 
     def test_incoherent_deleted_total_emits_a_warning(self) -> None:
         state = {

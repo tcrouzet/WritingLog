@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Tableau de bord local de l'activité d'écriture">
   <title>Writing Log</title>
-  <link rel="icon" href="assets/images/favicon.svg?v=20260916093911" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=20260916093911">
+  <link rel="icon" href="assets/images/favicon.svg?v=20260916133541" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=20260916133541">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-  <script src="dashboard.js?v=20260916093911" defer></script>
+  <script src="dashboard.js?v=20260916133541" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -31,12 +31,16 @@
 
     <section class="chart-grid">
       <article class="panel wide">
-        <header><div><h2>Production</h2><p>Texte nouveau · copies et déplacements exclus par l’analyse</p></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><select class="chart-range" data-chart="daily" aria-label="Période du graphique de production"><option value="30d" selected>30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all">Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
-        <div class="canvas-wrap"><canvas id="daily-chart"></canvas></div>
+        <header><div><h2>Production</h2></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la production"><button type="button" data-chart-zoom="daily" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="daily" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <div class="chart-scroll" data-chart-scroll="daily"><div class="canvas-wrap" data-chart-stage="daily"><canvas id="daily-chart"></canvas></div></div>
       </article>
       <article class="panel wide">
-        <header><div><h2>Taille</h2><p>Taille logique du manuscrit · compilations et doublons exclus</p></div><div class="chart-actions"><select class="chart-range" data-chart="size" aria-label="Période de la taille du manuscrit"><option value="30d">30 jours</option><option value="6m">6 mois</option><option value="1y">1 an</option><option value="all" selected>Tout</option></select><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
-        <div class="canvas-wrap tall"><canvas id="size-chart"></canvas></div>
+        <header><div><h2>Taille</h2></div><div class="chart-actions"><select id="size-granularity" aria-label="Granularité de la taille du manuscrit"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option><option value="year">Année</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la taille"><button type="button" data-chart-zoom="size" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="size" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <div class="chart-scroll" data-chart-scroll="size"><div class="canvas-wrap tall" data-chart-stage="size"><canvas id="size-chart"></canvas></div></div>
+      </article>
+      <article class="panel wide">
+        <header><div><h2>Production par jour de la semaine</h2></div><div class="chart-actions"><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <div class="canvas-wrap"><canvas id="weekday-chart"></canvas></div>
       </article>
     </section>
   </main>

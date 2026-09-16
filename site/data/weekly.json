@@ -1865,7 +1865,7 @@
   {
     "periode": "2025-W37",
     "projet": "Isa",
-    "signes_reels": 27935,
+    "signes_reels": 25553,
     "signes_supprimes": 9778,
     "dossiers": [
       "Zone/manuscrit"
@@ -2539,30 +2539,11 @@
   },
   {
     "periode": "2026-W14",
-    "projet": "Isa",
-    "signes_reels": 0,
-    "signes_supprimes": 1,
-    "dossiers": [
-      "Zone/manuscritv2"
-    ]
-  },
-  {
-    "periode": "2026-W14",
     "projet": "tcrouzet",
     "signes_reels": 22328,
     "signes_supprimes": 3809,
     "dossiers": [
       "tcrouzet"
-    ]
-  },
-  {
-    "periode": "2026-W15",
-    "projet": "Isa",
-    "signes_reels": 27426,
-    "signes_supprimes": 1169,
-    "dossiers": [
-      "Zone/Maison",
-      "Zone/manuscritv2"
     ]
   },
   {
@@ -2586,19 +2567,13 @@
   {
     "periode": "2026-W16",
     "projet": "Isa",
-    "signes_reels": 12140,
-    "signes_supprimes": 2592,
+    "signes_reels": 9042,
+    "signes_supprimes": 2340,
     "dossiers": [
       "Isa",
-      "Isa/Maison",
-      "Isa/archives/manuscritV1",
       "Isa/manuscrit",
       "Zone",
-      "Zone/Maison",
-      "Zone/archives/manuscritV1",
-      "Zone/manuscrit",
-      "Zone/manuscritV1",
-      "Zone/manuscritv2"
+      "Zone/manuscrit"
     ]
   },
   {
@@ -2616,7 +2591,7 @@
     "signes_reels": 26763,
     "signes_supprimes": 4526,
     "dossiers": [
-      "Isa/Maison",
+      "Isa",
       "Isa/manuscrit"
     ]
   },
@@ -2641,11 +2616,10 @@
   {
     "periode": "2026-W18",
     "projet": "Isa",
-    "signes_reels": 40820,
+    "signes_reels": 40856,
     "signes_supprimes": 6975,
     "dossiers": [
       "Isa",
-      "Isa/Maison",
       "Isa/manuscrit"
     ]
   },
@@ -2773,7 +2747,6 @@
     "signes_supprimes": 8784,
     "dossiers": [
       "Isa",
-      "Isa/archives/manuscritV1",
       "Isa/manuscrit"
     ]
   },

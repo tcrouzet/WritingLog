@@ -28,7 +28,7 @@ La règle trop large « tout fichier créé puis supprimé = fichier transitoire
 
 ### Pourquoi les jours sont artificiels
 
-Lorsque plusieurs jours séparent deux commits, la production attribuée au second est divisée uniformément entre les dates intermédiaires. Cette ventilation évite un pic sur la date du commit, mais elle **n’observe aucun jour de production réel**. Un texte écrit en une soirée et commité quatre jours plus tard devient quatre journées fictives de même volume. Un commit intermédiaire sans rapport avec le projet raccourcit en plus cette fenêtre, puisque chaque commit constitue un nouvel instantané du vault.
+Lorsque plusieurs jours séparent deux commits du dépôt, la production attribuée au second est divisée uniformément entre les dates intermédiaires. Cette ventilation évite un pic sur la date du commit, mais elle **n’observe aucun jour de production réel**. Un texte écrit en une soirée et commité quatre jours plus tard devient quatre journées fictives de même volume. La borne de départ est toujours le commit précédent du vault, tous projets confondus : sa présence indique qu’un instantané intermédiaire existait et empêche d’étaler un texte au-delà.
 
 Les écarts entre commits ne mesurent pas le temps passé à écrire : l’auteur peut avoir travaillé hors d’Obsidian, laissé l’éditeur ouvert ou effectué plusieurs opérations entre deux sauvegardes. Writing Log ne calcule donc plus aucune durée de travail ni aucun rythme en signes par heure.
 
@@ -178,9 +178,11 @@ Une fusion comme `zone.md` est reconnue par ses fingerprints déjà présents, s
 
 ### 5. Git donne une fenêtre, pas toujours un jour d’écriture
 
-Git enregistre la date du commit, pas la date de frappe de chaque caractère. Quand deux commits sont espacés de plusieurs jours, Writing Log n’attribue pas tout le travail au dernier jour : les signes sont répartis uniformément entre le lendemain du commit précédent et le jour du commit courant.
+Git enregistre la date du commit, pas la date de frappe de chaque caractère. Writing Log n’attribue pas tout le travail au dernier jour : les signes sont répartis uniformément entre le lendemain du commit global précédent et le jour du commit courant. Un commit concernant un autre projet interrompt donc l’intervalle, puisqu’un texte déjà présent à cet instant aurait été inclus dans cet instantané du vault.
 
 Cette répartition est une estimation imposée par l’absence de commits intermédiaires. Elle préserve exactement le total, mais ne prétend pas reconstruire l’heure ou le jour exact de chaque phrase.
+
+Le passage depuis une base ayant calculé les intervalles séparément par projet exige une reconstruction avec `./analyse.sh full`. Les analyses incrémentales suivantes reprennent automatiquement à partir de la date du dernier commit global enregistré dans SQLite.
 
 ### 6. Les sorties sont reconstruites depuis les événements
 
@@ -252,9 +254,13 @@ Les deux opérations web sont elles-mêmes séparées :
 
 `export_data.py` lit SQLite, calcule les agrégats d’affichage et remplace `site/data/*.json`. `web.py` copie uniquement HTML, CSS, JavaScript et images depuis `web/` vers `site/`. `./web.sh` enchaîne ces deux commandes par commodité, sans relire Git, reclasser le texte ou démarrer un serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
 
-Le filtre principal permet d’isoler un projet. Le graphique « Production » regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi.
+Le filtre principal permet d’isoler un projet. Le graphique « Production » affiche toujours tout l’historique et regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi. Le zoom et le défilement horizontal permettent d’examiner une portion de cette chronologie complète.
 
-Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit au dernier commit de chaque jour, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. La courbe monte ou descend sans lissage et n’est pas reconstruite à partir de la production. Chaque graphique possède son propre choix de période — 30 jours, 6 mois, 1 an ou tout l’historique lorsque cette granularité est pertinente. Les JSON conservent toujours l’historique complet.
+L’histogramme placé en bas, « Production par jour de la semaine », additionne sur tout l’historique les signes réellement produits du lundi au dimanche pour le projet sélectionné. Son infobulle indique aussi la moyenne par occurrence de ce jour et le nombre de jours actifs, afin de distinguer volume cumulé et régularité.
+
+Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. Lorsque deux commits globaux sont séparés de plusieurs jours et que la taille change au second, l’export ajoute un point estimé pour chaque journée intermédiaire et répartit exactement la variation entière entre ces jours ; les instantanés Git d’origine restent identifiés séparément. Son axe vertical part de la plus petite valeur utile affichée au lieu d’être systématiquement forcé à zéro. Son sélecteur choisit uniquement la granularité — dernier état de chaque jour, semaine ISO, mois ou année — et ne coupe jamais la chronologie : tout l’historique reste affiché. Les JSON conservent toujours les points de chaque commit.
+
+Les boutons `−` et `+` règlent indépendamment l’échelle horizontale de chaque graphique. Dès que le tracé devient plus large que la page, il se parcourt horizontalement ; le niveau de zoom est conservé dans `localStorage`. Les infobulles indiquent le dossier analysé, notamment pour contrôler les changements de racine historique.
 
 Le bouton placé en haut à droite de chaque graphique permet de télécharger son rendu en PNG ou en SVG vectoriel. Le nom du fichier reprend le projet sélectionné et le titre du graphique.
 
@@ -273,7 +279,7 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - `overview.json` : totaux et fraîcheur des données ;
 - `projects.json` : totaux d’écriture réelle, suppressions éditoriales, taille actuelle et métadonnées de chaque projet ;
 - `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
-- `size_evolution.json` : tailles logique (`taille_signes`) et brute (`taille_brute`) du manuscrit à chaque commit global, avec timestamp, hash et indicateur de modification du projet ;
+- `size_evolution.json` : tailles logique (`taille_signes`) et brute (`taille_brute`) du manuscrit à chaque commit global, avec timestamp, hash, dossier analysé et indicateur de modification du projet ;
 - `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
 
 `state.json` n’est plus généré : l’état interne reste exclusivement dans SQLite.
