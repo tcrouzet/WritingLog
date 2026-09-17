@@ -117,6 +117,23 @@ def json_compatible(value: Any) -> Any:
     return value
 
 
+def project_file_settings(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str] | None]:
+    """Retire de projet.yml la section réservée aux dossiers exclus."""
+    metadata = dict(raw)
+    excluded_folders = metadata.pop("excluded_folders", None)
+    if excluded_folders is not None and (
+        not isinstance(excluded_folders, list)
+        or not all(isinstance(folder, str) and folder.strip() for folder in excluded_folders)
+    ):
+        raise ValueError("projet.yml: excluded_folders doit être une liste de dossiers.")
+    return (
+        metadata,
+        [folder.strip() for folder in excluded_folders]
+        if excluded_folders is not None
+        else None,
+    )
+
+
 def path_key(path: str) -> str:
     """Évite d'exposer les noms de fichiers dans l'état destiné à être publié."""
     return hashlib.sha256(path.encode("utf-8", errors="surrogateescape")).hexdigest()
@@ -424,10 +441,21 @@ def configured_project_paths(
         if include_history and isinstance(fields, dict):
             for historical in fields.get("history_folders", []):
                 historical_parts = PurePosixPath(str(historical).strip("/")).parts
-                locations.append(tuple(part.casefold() for part in historical_parts))
+                historical_location = tuple(part.casefold() for part in historical_parts)
+                if historical_location not in locations:
+                    locations.append(historical_location)
         # Un projet archivé conserve aussi son emplacement historique avant le déplacement.
-        if include_history and len(parts) >= 2 and parts[0].casefold() == "archives":
-            locations.append(tuple(part.casefold() for part in (project_id, *parts[2:])))
+        if (
+            include_history
+            and len(parts) >= 2
+            and parts[0].casefold() == "archives"
+            and not (isinstance(fields, dict) and "history_folders" in fields)
+        ):
+            previous_location = tuple(
+                part.casefold() for part in (project_id, *parts[2:])
+            )
+            if previous_location not in locations:
+                locations.append(previous_location)
         paths[project_id] = locations
     return paths
 
@@ -448,6 +476,118 @@ def configured_size_paths(metadata: dict[str, Any]) -> dict[str, list[tuple[str,
             or "archives" not in location
         ]
     return size_paths
+
+
+def reconstructed_project_paths(
+    configured_paths: dict[str, list[tuple[str, ...]]],
+    commits: list[Any],
+    changes_by_commit: dict[str, list[Any]],
+    excluded_roots: set[str],
+    protected_projects: set[str],
+    *,
+    size_mode: bool = False,
+) -> dict[str, list[tuple[str, ...]]]:
+    """Retrouve les anciens chemins des seuls projets sans historique manuel."""
+    paths = {project: list(locations) for project, locations in configured_paths.items()}
+    safe_paths = {project: tuple(locations) for project, locations in paths.items()}
+    markers = {
+        project: re.sub(r"v\d+$", "", locations[0][-1])
+        for project, locations in safe_paths.items()
+        if locations and locations[0]
+    }
+
+    def plausible(project: str, candidate: tuple[str, ...]) -> bool:
+        marker = markers.get(project, "")
+        current_is_archived = "archives" in safe_paths.get(project, ((),))[0]
+        return bool(
+            candidate
+            and candidate[0] not in excluded_roots
+            and marker
+            and candidate[-1].startswith(marker)
+            and not (size_mode and "archives" in candidate and not current_is_archived)
+        )
+
+    rename_candidates: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+    for commit in reversed(commits):
+        for change in reversed(changes_by_commit.get(commit.sha, [])):
+            if change.status != "R" or not change.old_path or not change.new_path:
+                continue
+            new_parts = tuple(part.casefold() for part in PurePosixPath(change.new_path).parts)
+            old_parts = tuple(part.casefold() for part in PurePosixPath(change.old_path).parts)
+            matches = [
+                (len(location), project, location)
+                for project, locations in safe_paths.items()
+                if project not in protected_projects
+                for location in locations
+                if new_parts[: len(location)] == location
+            ]
+            if not matches:
+                continue
+            _, project, location = max(matches, key=lambda item: item[0])
+            relative_depth = len(new_parts) - len(location)
+            if relative_depth < 1 or len(old_parts) <= relative_depth:
+                continue
+            previous_location = old_parts[:-relative_depth]
+            if plausible(project, previous_location):
+                rename_candidates[project].add(previous_location)
+    for project, candidates in rename_candidates.items():
+        for candidate in sorted(candidates):
+            if candidate not in paths[project]:
+                paths[project].append(candidate)
+
+    # Une copie ancienne n'a pas de statut R. Les OID Git relient ses fichiers
+    # identiques sans lire ni rehasher leur contenu.
+    occurrences: dict[str, list[tuple[int, tuple[str, ...]]]] = defaultdict(list)
+    for index, commit in enumerate(commits):
+        for change in changes_by_commit.get(commit.sha, []):
+            if change.old_oid and change.old_path:
+                occurrences[change.old_oid].append((index, PurePosixPath(change.old_path).parts))
+            if change.new_oid and change.new_path:
+                occurrences[change.new_oid].append((index, PurePosixPath(change.new_path).parts))
+
+    for project, locations in paths.items():
+        if project in protected_projects:
+            continue
+        safe_locations = tuple(locations)
+        votes: dict[tuple[str, ...], set[str]] = defaultdict(set)
+        for oid, entries in occurrences.items():
+            known: list[tuple[int, tuple[str, ...]]] = []
+            for index, actual_parts in entries:
+                folded = tuple(part.casefold() for part in actual_parts)
+                matches = [
+                    location
+                    for location in safe_locations
+                    if folded[: len(location)] == location
+                ]
+                if matches:
+                    location = max(matches, key=len)
+                    known.append((index, actual_parts[len(location) :]))
+            for known_index, relative in known:
+                relative_folded = tuple(part.casefold() for part in relative)
+                for index, actual_parts in entries:
+                    if index > known_index:
+                        continue
+                    folded = tuple(part.casefold() for part in actual_parts)
+                    if any(
+                        folded[: len(location)] == location
+                        for location in safe_locations
+                    ):
+                        continue
+                    candidate = (
+                        folded[: -len(relative)]
+                        if relative and folded[-len(relative) :] == relative_folded
+                        else folded[:-1]
+                    )
+                    if candidate:
+                        votes[candidate].add(oid)
+        for candidate, supporting_oids in votes.items():
+            if (
+                plausible(project, candidate)
+                and (len(supporting_oids) >= 2 or candidate[0] == project.casefold())
+                and candidate not in locations
+            ):
+                locations.append(candidate)
+    return paths
 
 
 def size_location_for(
@@ -544,6 +684,7 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "size_roots": {},
         "active_size_roots": {},
         "events": [],
+        "initialized_projects": [],
         "size_points": [],
         "archive_moves": {},
         "deletion_candidates": [],
@@ -661,6 +802,11 @@ def process_history_diff(
     size_roots = state.setdefault("size_roots", {})
     active_size_roots = state.setdefault("active_size_roots", {})
     events = state["events"]
+    initialized_projects = set(
+        state.get("initialized_projects")
+        or (event["project"] for event in events)
+    )
+    configured_projects = {str(project).casefold() for project in metadata}
     size_points = state["size_points"]
     archive_moves = state["archive_moves"]
     deletion_candidates = state["deletion_candidates"]
@@ -690,6 +836,35 @@ def process_history_diff(
             "folders": set(),
         }
 
+    # Un full reconstruit les anciens chemins avant le replay. La même lecture
+    # groupée des changements est ensuite réutilisée par l'analyse.
+    full_changes = (
+        changed_paths_batch(repo, [commit.sha for commit in commits], detect_renames=True)
+        if full_run and commits
+        else {}
+    )
+    if full_changes:
+        protected_projects = {
+            str(project)
+            for project, fields in metadata.items()
+            if isinstance(fields, dict) and "history_folders" in fields
+        }
+        history_paths = reconstructed_project_paths(
+            history_paths,
+            commits,
+            full_changes,
+            excluded,
+            protected_projects,
+        )
+        size_paths = reconstructed_project_paths(
+            size_paths,
+            commits,
+            full_changes,
+            excluded,
+            protected_projects,
+            size_mode=True,
+        )
+
     # Un full est une reconstruction sans état caché : la base est toujours
     # purgée avant de rejouer le premier commit.
     reset_index = full_run
@@ -702,15 +877,18 @@ def process_history_diff(
             # Inséré dans la même transaction que ses fingerprints. Tant que
             # celle-ci n'est pas validée, le commit n'est pas considéré traité.
             fingerprints.record_processed_commit(commit.sha, commit.timestamp)
-            wanted_batch_start = ((relative_index - 1) // 100) * 100
-            if wanted_batch_start != batch_start:
-                batch_start = wanted_batch_start
-                batch = pending[batch_start : batch_start + 100]
-                batch_changes = changed_paths_batch(
-                    repo,
-                    [item.sha for item in batch],
-                    detect_renames=True,
-                )
+            if full_run:
+                batch_changes = full_changes
+            else:
+                wanted_batch_start = ((relative_index - 1) // 100) * 100
+                if wanted_batch_start != batch_start:
+                    batch_start = wanted_batch_start
+                    batch = pending[batch_start : batch_start + 100]
+                    batch_changes = changed_paths_batch(
+                        repo,
+                        [item.sha for item in batch],
+                        detect_renames=True,
+                    )
             absolute_index = start + relative_index
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
@@ -1224,7 +1402,13 @@ def process_history_diff(
                 interval_start = commit_intervals.get(commit.sha)
                 # Les fingerprints décident seuls : déjà connu signifie copie ou
                 # déplacement ; inconnu signifie production nouvelle.
-                real_chars = novel_chars
+                # Pour un projet détecté automatiquement, le premier instantané
+                # est un stock initial observé, pas du texte produit ce jour-là.
+                initial_baseline = (
+                    project.casefold() not in configured_projects
+                    and project not in initialized_projects
+                )
+                real_chars = 0 if initial_baseline else novel_chars
                 event_index = len(events)
                 event_indexes[project] = event_index
                 events.append({
@@ -1233,12 +1417,14 @@ def process_history_diff(
                     "commit": commit.sha,
                     "project": project,
                     "real_chars": real_chars,
+                    "baseline_chars": novel_chars if initial_baseline else 0,
                     "import_chars": 0,
                     "internal_chars": values["internal"],
                     "edit_delta": 0,
                     "folders": sorted(values["folders"]),
                     "duplication_sources": values["sources"],
                 })
+                initialized_projects.add(project)
                 for candidate_number, (source_file, part, removed_hashes) in enumerate(values["removed"]):
                     if not removed_hashes:
                         events[event_index]["edit_delta"] -= len(part)
@@ -1336,6 +1522,7 @@ def process_history_diff(
                 ))
             fingerprints.record_project_commits(commit.sha, project_commit_snapshots)
             state["last_commit"] = commit.sha
+            state["initialized_projects"] = sorted(initialized_projects)
             progress.update(display_index)
         normalize_size_history(size_points)
         fingerprints.update_project_commit_logical_sizes(
@@ -1404,7 +1591,10 @@ def main() -> int:
     base_dir = config_path.parent
     try:
         config = normalized_config(load_yaml(config_path))
-        metadata = json_compatible(load_yaml(base_dir / "projet.yml"))
+        project_file = json_compatible(load_yaml(base_dir / "projet.yml"))
+        metadata, project_excluded_folders = project_file_settings(project_file)
+        if project_excluded_folders is not None:
+            config["excluded_folders"] = project_excluded_folders
         vault = (base_dir / config["vault_path"]).resolve()
         history_repo = (
             (base_dir / config["history_repo"]).resolve()

@@ -2,11 +2,6 @@ vault_path: "/Users/thierrycrouzet/Documents/ObsidianLocal/text/"
 history_repo: ".cache/vault-history.git"
 fingerprint_db: ".cache/fingerprints.sqlite3"
 
-excluded_folders:
-  - "templates"
-  - ".obsidian"
-  - "archives"
-
 file_extensions: [".md"]
 
 internal_detection:

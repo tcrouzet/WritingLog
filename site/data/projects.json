@@ -1,61 +1,16 @@
 [
   {
-    "id": "727",
-    "title": "727",
-    "signes_reels_total": 148341,
-    "signes_supprimes_total": 5745,
-    "taille_actuelle": 186008,
-    "date_creation": "2026-08-02T15:54:41+02:00",
-    "derniere_activite": "2026-09-15T15:56:57+02:00"
-  },
-  {
-    "id": "BornToBike",
-    "title": "BornToBike",
-    "signes_reels_total": 79966,
-    "signes_supprimes_total": 6314,
-    "taille_actuelle": 3150290,
-    "date_creation": "2024-01-02T17:14:48+01:00",
-    "derniere_activite": "2026-09-15T21:38:19+02:00"
-  },
-  {
-    "id": "Carnets",
-    "title": "Carnets",
-    "signes_reels_total": 17282,
-    "signes_supprimes_total": 8296,
-    "taille_actuelle": 3912593,
-    "date_creation": "2024-01-04T18:56:16+01:00",
-    "derniere_activite": "2026-03-09T10:13:57+01:00"
-  },
-  {
-    "id": "Divers",
-    "title": "Divers",
-    "signes_reels_total": 57024,
-    "signes_supprimes_total": 4442,
-    "taille_actuelle": 178111,
-    "date_creation": "2024-01-07T12:30:55+01:00",
-    "derniere_activite": "2026-01-09T18:57:31+01:00"
-  },
-  {
-    "id": "IA",
-    "title": "IA",
-    "signes_reels_total": 400081,
-    "signes_supprimes_total": 19958,
-    "taille_actuelle": 748760,
-    "date_creation": "2024-01-02T07:02:22+01:00",
-    "derniere_activite": "2026-08-25T17:22:25+02:00"
-  },
-  {
     "title": "L'expérience humaine",
     "folder": "Isa/manuscrit",
     "history_folders": [
       "Zone/manuscrit"
     ],
     "id": "Isa",
-    "signes_reels_total": 590206,
-    "signes_supprimes_total": 150363,
-    "taille_actuelle": 383300,
+    "signes_reels_total": 586614,
+    "signes_supprimes_total": 153983,
+    "taille_actuelle": 395613,
     "date_creation": "2025-08-02T10:38:31+02:00",
-    "derniere_activite": "2026-09-16T11:19:05+02:00"
+    "derniere_activite": "2026-09-16T14:50:28+02:00"
   },
   {
     "id": "L'atelier d'écriture",
@@ -76,49 +31,35 @@
     "derniere_activite": "2024-02-19T09:04:40+01:00"
   },
   {
-    "id": "Projets",
-    "title": "Projets",
-    "signes_reels_total": 2638,
-    "signes_supprimes_total": 0,
-    "taille_actuelle": 661807,
-    "date_creation": "2025-02-12T08:09:58+01:00",
-    "derniere_activite": "2025-10-25T11:05:19+02:00"
-  },
-  {
     "title": "Rush",
     "folder": "Archives/Rush/manuscrit",
+    "history_folders": [
+      "Rush/manuscrit",
+      "RR/Manuscrit"
+    ],
     "id": "Rush",
-    "signes_reels_total": 49793,
-    "signes_supprimes_total": 96609,
+    "signes_reels_total": 158939,
+    "signes_supprimes_total": 369682,
     "taille_actuelle": 391832,
-    "date_creation": "2024-12-07T11:23:06+01:00",
+    "date_creation": "2024-06-29T21:10:01+02:00",
     "derniere_activite": "2025-12-13T11:05:56+01:00"
-  },
-  {
-    "id": "WIP",
-    "title": "WIP",
-    "signes_reels_total": 3629079,
-    "signes_supprimes_total": 141243,
-    "taille_actuelle": 2253527,
-    "date_creation": "2024-01-13T18:39:59+01:00",
-    "derniere_activite": "2026-07-16T08:24:45+02:00"
   },
   {
     "id": "iT",
     "title": "iT",
-    "signes_reels_total": 469887,
+    "signes_reels_total": 469613,
     "signes_supprimes_total": 139352,
     "taille_actuelle": 679808,
-    "date_creation": "2025-12-07T09:49:51+01:00",
+    "date_creation": "2025-12-07T11:18:24+01:00",
     "derniere_activite": "2026-04-08T16:58:10+02:00"
   },
   {
     "id": "tcrouzet",
     "title": "tcrouzet",
-    "signes_reels_total": 9008673,
-    "signes_supprimes_total": 1484945,
+    "signes_reels_total": 2990785,
+    "signes_supprimes_total": 1484028,
     "taille_actuelle": 15856212,
-    "date_creation": "2024-04-18T18:48:49+02:00",
+    "date_creation": "2024-04-18T19:09:38+02:00",
     "derniere_activite": "2026-09-16T10:18:48+02:00"
   }
 ]

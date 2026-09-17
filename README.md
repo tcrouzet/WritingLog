@@ -114,6 +114,13 @@ L’identifiant YAML du projet reste stable même si son dossier change. Pour ch
 
 Une correspondance explicite dans `projet.yml` est prioritaire sur `excluded_folders`. Le chemin racine qui a produit chaque valeur — par exemple `Isa/manuscrit` ou `Zone/manuscrit` — est conservé dans les données quotidiennes et affiché dans l’infobulle du graphique.
 
+Pour un projet découvert automatiquement et déjà rempli lors de sa première
+apparition, ce premier instantané initialise uniquement sa taille. Il est
+enregistré comme `baseline_chars` et ne compte pas dans les signes produits du
+premier jour. Seules les modifications des commits suivants alimentent la
+production. Les projets explicitement déclarés dans `projet.yml` conservent
+leur historique normal dès leur premier commit suivi.
+
 La filiation textuelle ne s’arrête pas à cette liste statique. Dès qu’un fichier attribué à un projet est renommé ou déplacé, il conserve cet identifiant même si sa destination — par exemple `Isa/archives/Maison` ou `Isa/archives/manuscritV1-2025` — n’était pas encore déclarée dans `history_folders`. Le registre des fichiers propage ensuite cette attribution aux modifications et à la suppression éventuelle du nouveau chemin : son texte reste reconnaissable et son activité reste rattachée au bon projet.
 
 La **taille du manuscrit** obéit à une règle distincte. Une seule racine est active. La simple apparition d’une V2 incomplète ne suffit pas à abandonner la V1 : le changement intervient lorsque l’ancienne racine est transférée ou disparaît, ou lorsque le dossier courant reçoit effectivement le manuscrit. Les anciennes versions rangées dans un sous-dossier `archives` ne comptent jamais, sauf lorsque le `folder` courant du projet se trouve lui-même sous `Archives`.

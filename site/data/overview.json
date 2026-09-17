@@ -1,9 +1,9 @@
 {
-  "signes_reels_total": 14453060,
-  "signes_supprimes_total": 2057267,
-  "nombre_projets": 13,
+  "signes_reels_total": 4206041,
+  "signes_supprimes_total": 2147045,
+  "nombre_projets": 6,
   "projet_plus_actif_30_jours": "tcrouzet",
   "projet_plus_actif_30_jours_titre": "tcrouzet",
-  "derniere_mise_a_jour": "2026-09-16T15:29:51+02:00",
-  "dernier_commit": "acf09501de9cdec09bc395b6f123bf920fba5a08"
+  "derniere_mise_a_jour": "2026-09-17T15:54:18+02:00",
+  "dernier_commit": "dff47301358c6261dfa9c3baa6dda3b26a95134d"
 }

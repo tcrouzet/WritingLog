@@ -17,6 +17,7 @@
 
   const title = id => data.projects.find(project => project.id === id)?.title || id;
   const color = id => {
+    if (id === "__all__") return palette[0];
     if (!colors.has(id)) colors.set(id, palette[colors.size % palette.length]);
     return colors.get(id);
   };
@@ -132,12 +133,33 @@
     return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${period}T12:00:00Z`));
   }
 
+  function combinedProductionRows(rows) {
+    const buckets = new Map();
+    for (const row of rows) {
+      const bucket = buckets.get(row.periode) || {
+        periode: row.periode,
+        signes_reels: 0,
+        dossiers: new Set()
+      };
+      bucket.signes_reels += Number(row.signes_reels) || 0;
+      for (const folder of row.dossiers || []) bucket.dossiers.add(folder);
+      buckets.set(row.periode, bucket);
+    }
+    return [...buckets.values()].map(row => ({ ...row, dossiers: [...row.dossiers].sort() }));
+  }
+
   function productionChart(canvas, rows, kind) {
     const visibleIds = new Set(visibleProjects().map(project => project.id));
     const visibleRows = rows.filter(row => visibleIds.has(row.projet));
-    const temporal = temporalAxis(visibleRows);
-    const datasets = visibleProjects().map(project => {
-      const rows = visibleRows.filter(row => row.projet === project.id);
+    const series = selectedProject === "all"
+      ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(visibleRows) }]
+      : visibleProjects().map(project => ({
+          id: project.id,
+          title: project.title,
+          rows: visibleRows.filter(row => row.projet === project.id)
+        }));
+    const temporal = temporalAxis(series.flatMap(item => item.rows));
+    const datasets = series.map(item => {
       const point = row => ({
         x: periodTimestamp(row.periode),
         y: row.signes_reels,
@@ -146,9 +168,9 @@
         folders: row.dossiers || []
       });
       return {
-        label: project.title,
-        data: rows.map(point),
-        backgroundColor: color(project.id),
+        label: item.title,
+        data: item.rows.map(point),
+        backgroundColor: color(item.id),
         borderRadius: 2,
         maxBarThickness: 32
       };
@@ -188,8 +210,15 @@
 
   function weekdayChart(canvas) {
     const lastDay = latestDate().slice(0, 10);
-    const datasets = visibleProjects().map(project => {
-      const allRows = data.daily.filter(row => row.projet === project.id).sort((a, b) => a.periode.localeCompare(b.periode));
+    const series = selectedProject === "all"
+      ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(data.daily) }]
+      : visibleProjects().map(project => ({
+          id: project.id,
+          title: project.title,
+          rows: data.daily.filter(row => row.projet === project.id)
+        }));
+    const datasets = series.map(item => {
+      const allRows = item.rows.sort((a, b) => a.periode.localeCompare(b.periode));
       const projectStart = allRows[0]?.periode || lastDay;
       const occurrences = weekdayOccurrences(projectStart, lastDay);
       const totals = Array(7).fill(0);
@@ -200,7 +229,7 @@
         if (row.signes_reels > 0) activeDays[index] += 1;
       }
       return {
-        label: project.title,
+        label: item.title,
         data: totals.map((total, index) => ({
           x: weekdayLabels[index],
           y: total,
@@ -209,7 +238,7 @@
           activeDays: activeDays[index],
           average: occurrences[index] ? Math.round(total / occurrences[index]) : 0
         })),
-        backgroundColor: color(project.id),
+        backgroundColor: color(item.id),
         borderRadius: 2,
         maxBarThickness: 90
       };
@@ -454,18 +483,22 @@
     });
   }
 
+  function sizeBucket(date, granularity) {
+    const day = date.slice(0, 10);
+    return granularity === "year"
+      ? day.slice(0, 4)
+      : granularity === "month"
+        ? day.slice(0, 7)
+        : granularity === "week" ? isoWeek(day) : day;
+  }
+
   function sizeRows(granularity) {
     const result = [];
     for (const project of visibleProjects()) {
       const rows = data.size_evolution.filter(row => row.projet === project.id).sort((a, b) => a.date.localeCompare(b.date));
       const buckets = new Map();
       for (const row of rows) {
-        const day = row.date.slice(0, 10);
-        const bucket = granularity === "year"
-          ? day.slice(0, 4)
-          : granularity === "month"
-            ? day.slice(0, 7)
-            : granularity === "week" ? isoWeek(day) : day;
+        const bucket = sizeBucket(row.date, granularity);
         const previous = buckets.get(bucket);
         buckets.set(bucket, {
           ...row,
@@ -473,6 +506,43 @@
         });
       }
       result.push(...buckets.values());
+    }
+    return result;
+  }
+
+  function combinedSizeRows(rows, granularity) {
+    const byProject = new Map();
+    for (const row of rows) {
+      if (!byProject.has(row.projet)) byProject.set(row.projet, new Map());
+      byProject.get(row.projet).set(sizeBucket(row.date, granularity), row);
+    }
+    const periods = [...new Set(rows.map(row => sizeBucket(row.date, granularity)))].sort();
+    const current = new Map();
+    const result = [];
+    for (const period of periods) {
+      const changed = [];
+      for (const [project, projectRows] of byProject) {
+        const row = projectRows.get(period);
+        if (!row) continue;
+        current.set(project, row);
+        changed.push(row);
+      }
+      if (!current.size) continue;
+      const activeRows = [...current.values()];
+      const reference = changed.slice().sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+      result.push({
+        date: reference.date,
+        commit: "",
+        source_commit: "",
+        projet: "__all__",
+        taille_signes: activeRows.reduce((sum, row) => sum + (Number(row.taille_signes) || 0), 0),
+        taille_brute: activeRows.reduce((sum, row) => sum + (Number(row.taille_brute ?? row.taille_signes) || 0), 0),
+        dossier: [...new Set(activeRows.map(row => row.dossier).filter(Boolean))].sort().join(", "),
+        modifie: changed.some(row => row.modifie),
+        estime: changed.some(row => row.estime),
+        aggregate: true,
+        project_count: activeRows.length
+      });
     }
     return result;
   }
@@ -486,12 +556,19 @@
     const productionData = productionGranularity === "week" ? data.weekly : productionGranularity === "month" ? data.monthly : data.daily;
     charts.daily = productionChart(document.querySelector("#daily-chart"), productionData, productionGranularity);
     charts.weekday = weekdayChart(document.querySelector("#weekday-chart"));
-    const sizes = sizeRows(sizeGranularity);
-    const sizeTemporal = temporalAxis(sizes, "date");
-    const sizeDatasets = visibleProjects().map(project => {
+    const projectSizes = sizeRows(sizeGranularity);
+    const sizeSeries = selectedProject === "all"
+      ? [{ id: "__all__", title: "Tous les projets", rows: combinedSizeRows(projectSizes, sizeGranularity) }]
+      : visibleProjects().map(project => ({
+          id: project.id,
+          title: project.title,
+          rows: projectSizes.filter(row => row.projet === project.id)
+        }));
+    const sizeTemporal = temporalAxis(sizeSeries.flatMap(item => item.rows), "date");
+    const sizeDatasets = sizeSeries.map(item => {
       return {
-        label: project.title,
-        data: sizes.filter(row => row.projet === project.id).map(row => ({
+        label: item.title,
+        data: item.rows.map(row => ({
           x: periodTimestamp(row.date),
           y: row.taille_signes,
           rawSize: row.taille_brute ?? row.taille_signes,
@@ -500,9 +577,11 @@
           sourceCommit: row.source_commit || "",
           folder: row.dossier || "",
           estimated: Boolean(row.estime),
-          touched: Boolean(row.modifie)
+          touched: Boolean(row.modifie),
+          aggregate: Boolean(row.aggregate),
+          projectCount: Number(row.project_count) || 1
         })),
-        borderColor: color(project.id),
+        borderColor: color(item.id),
         pointRadius: context => context.raw?.touched ? 1.75 : 0.5,
         pointHoverRadius: 5,
         spanGaps: false,
@@ -518,7 +597,12 @@
         dateStyle: "long", timeStyle: "medium"
       }).format(new Date(items[0].raw.timestamp)),
       label: context => `Taille : ${formatter.format(context.raw.y)} signes`,
-      afterLabel: context => context.raw.estimated
+      afterLabel: context => context.raw.aggregate
+        ? [
+            `Cumul de ${context.raw.projectCount} projets`,
+            `Dossiers analysés : ${context.raw.folder || "—"}`
+          ]
+        : context.raw.estimated
         ? [
             `Estimation quotidienne vers le commit : ${context.raw.sourceCommit.slice(0, 12)}`,
             `Dossier analysé : ${context.raw.folder || "—"}`

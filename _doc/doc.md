@@ -7,6 +7,8 @@ sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1
 
 # Web
 
+https://tcrouzet.github.io/WritingLog/
+
 ./web
 
 cd /Users/thierrycrouzet/Documents/python/WritingLog/site
@@ -17,3 +19,7 @@ http://localhost:8001
 
 
 grep -A3 "Isa" site/data/size_evolution.json > extrait_isa.txt
+
+grep -B1 -A2 '"projet": "Isa"' site/data/daily.json > extrait_isa_daily.txt
+
+cd /Users/thierrycrouzet/Documents/ObsidianLocal/text/

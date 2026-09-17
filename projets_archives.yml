@@ -4,6 +4,9 @@
 "13-Épicènes":
   title: "13-Épicènes"
   folder: "Archives/Épicènes"
+15-WIP:
+  title: "15-WIP"
+  folder: "Archives/Géolecture"
 24-Archives:
   title: "24-Archives"
   folder: "Archives/1minute/Manuscrit"
@@ -13,9 +16,6 @@ Blog:
 CodeH:
   title: "CodeH"
   folder: "Archives/CodeH/Manuscrit"
-RR:
-  title: "RR"
-  folder: "Archives/Rush/manuscrit"
 Tract:
   title: "Tract"
   folder: "Archives/LeLivreContreAttaque/Manuscrit"

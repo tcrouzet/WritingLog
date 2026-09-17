@@ -18,7 +18,7 @@ ANALYZER = ROOT / "scripts" / "analyze_vault.py"
 DATA_EXPORTER = ROOT / "scripts" / "export_data.py"
 WEB_BUILDER = ROOT / "scripts" / "web.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from analyze_vault import character_changes, classification_blocks, load_state
+from analyze_vault import character_changes, classification_blocks, load_state, project_file_settings
 from export_data import aggregate, interpolate_size_rows
 from fingerprint_index import FingerprintIndex
 
@@ -91,6 +91,122 @@ output_dir: site
             with FingerprintIndex(self.root / ".cache" / "fingerprints.sqlite3") as database:
                 return database.load_analysis_state()
         return json.loads((self.root / "site" / "data" / name).read_text(encoding="utf-8"))
+
+    def test_excluded_folders_are_reserved_in_project_file(self) -> None:
+        metadata, excluded = project_file_settings({
+            "excluded_folders": ["WIP", "Carnets"],
+            "Alpha": {"folder": "Alpha/manuscrit"},
+        })
+        self.assertEqual(set(metadata), {"Alpha"})
+        self.assertEqual(excluded, ["WIP", "Carnets"])
+
+    def test_automatic_project_initial_snapshot_is_size_not_production(self) -> None:
+        ongoing = self.vault / "Ongoing"
+        ongoing.mkdir()
+        initial = self.text(5000, seed=220)
+        addition = self.text(100, seed=221)
+        chapter = ongoing / "chapter.md"
+        chapter.write_text(initial, encoding="utf-8")
+        self.commit("existing project snapshot", "2026-01-01T10:00:00+01:00")
+        chapter.write_text(initial + addition, encoding="utf-8")
+        self.commit("new writing", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+
+        project = next(item for item in self.load("projects.json") if item["id"] == "Ongoing")
+        self.assertEqual(project["taille_actuelle"], len(initial + addition))
+        self.assertEqual(project["signes_reels_total"], len(addition))
+        daily = [row for row in self.load("daily.json") if row["projet"] == "Ongoing"]
+        self.assertEqual(
+            [(row["periode"], row["signes_reels"]) for row in daily],
+            [("2026-01-02", len(addition))],
+        )
+        first_event = next(
+            event
+            for event in self.load("state.json")["events"]
+            if event["project"] == "Ongoing"
+        )
+        self.assertEqual(first_event["real_chars"], 0)
+        self.assertEqual(first_event["baseline_chars"], len(initial))
+
+    def test_project_history_is_reconstructed_from_git_renames_when_absent(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "Rush:\n  title: Rush\n  folder: Archives/Rush/manuscrit\n",
+            encoding="utf-8",
+        )
+        old_root = self.vault / "Brouillons" / "Rush" / "manuscrit"
+        old_root.mkdir(parents=True)
+        text = self.text(2400, seed=215)
+        chapter = old_root / "chapter.md"
+        chapter.write_text(text, encoding="utf-8")
+        self.commit("start Rush", "2026-01-01T10:00:00+01:00")
+        current = self.vault / "Archives" / "Rush" / "manuscrit"
+        current.parent.mkdir(parents=True)
+        old_root.rename(current)
+        self.commit("archive Rush", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+
+        project = next(item for item in self.load("projects.json") if item["id"] == "Rush")
+        self.assertEqual(project["signes_reels_total"], len(text))
+
+    def test_project_history_is_reconstructed_from_old_blob_copies_when_absent(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "Rush:\n  title: Rush\n  folder: Archives/Rush/manuscrit\n",
+            encoding="utf-8",
+        )
+        old_root = self.vault / "Brouillons" / "Rush" / "manuscrit"
+        old_root.mkdir(parents=True)
+        texts = [self.text(1400, seed=216), self.text(1500, seed=217)]
+        for index, text in enumerate(texts):
+            (old_root / f"chapter-{index}.md").write_text(text, encoding="utf-8")
+        self.commit("old Rush copy", "2026-01-01T10:00:00+01:00")
+        current = self.vault / "Archives" / "Rush" / "manuscrit"
+        current.mkdir(parents=True)
+        for index, text in enumerate(texts):
+            (current / f"chapter-{index}.md").write_text(text, encoding="utf-8")
+        self.commit("copy Rush into archive", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+
+        state = self.load("state.json")
+        folders = {
+            folder
+            for event in state["events"]
+            if event["project"] == "Rush"
+            for folder in event["folders"]
+        }
+        self.assertIn("Brouillons/Rush/manuscrit", folders)
+
+    def test_explicit_history_disables_automatic_reconstruction(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "Rush:\n"
+            "  title: Rush\n"
+            "  folder: Archives/Rush/manuscrit\n"
+            "  history_folders: [Chosen/Rush/manuscrit]\n",
+            encoding="utf-8",
+        )
+        old_root = self.vault / "Brouillons" / "Rush" / "manuscrit"
+        old_root.mkdir(parents=True)
+        text = self.text(2400, seed=218)
+        chapter = old_root / "chapter.md"
+        chapter.write_text(text, encoding="utf-8")
+        self.commit("unlisted history", "2026-01-01T10:00:00+01:00")
+        current = self.vault / "Archives" / "Rush" / "manuscrit"
+        current.parent.mkdir(parents=True)
+        old_root.rename(current)
+        self.commit("move into current folder", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+
+        state = self.load("state.json")
+        folders = {
+            folder
+            for event in state["events"]
+            if event["project"] == "Rush"
+            for folder in event["folders"]
+        }
+        self.assertNotIn("Brouillons/Rush/manuscrit", folders)
 
     @staticmethod
     def text(length: int, seed: int = 1) -> str:
