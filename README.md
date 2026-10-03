@@ -1,46 +1,70 @@
-# Writing Log — dashboard local
+# WritingLog
 
-Writing Log transforme l’historique Git d’un vault Obsidian en statistiques d’écriture, puis les présente dans un dashboard statique. Il suit les fichiers Markdown situés dans les chemins des projets configurés ainsi que les projets ordinaires placés à la racine du vault.
+WritingLog transforme l’historique Git d’un vault Obsidian en tableau de bord d’écriture. Il aide à suivre l’évolution d’un manuscrit, à comparer la production dans le temps et à repérer les changements de dossier. Il suit aussi des fichiers précis, même lorsqu’ils changent de nom.
 
-## Avertissement — limites de la mesure
+WritingLog analyse les versions enregistrées dans Git. Il ne lit pas les modifications non commitées et ne mesure pas la frappe en direct.
 
-Writing Log reste un prototype : Git ne contient pas assez d’information pour reconstituer avec certitude la production. Les classifications sont contrôlables, mais ne doivent pas être confondues avec une observation de la frappe.
+## Ce que montrent les graphiques
 
-### Ce que Git permet réellement d’observer
+- **Signes produits** : texte considéré comme nouveau par rapport au texte déjà rencontré dans l’historique du vault. Les passages reconnus comme déplacés ou dupliqués ne sont pas comptés comme nouvelle production.
+- **Taille** : évolution estimée du manuscrit suivi. Elle sert à voir le volume du texte au fil du temps, et non le travail réalisé pendant une journée.
+- **Production par jour de la semaine** : répartition de la production estimée entre lundi et dimanche.
+- **Activité horaire d’un fichier** : activité enregistrée aux heures des commits qui touchent ce fichier.
 
-Pour chaque commit, Git fournit deux instantanés du texte et leur date d’enregistrement. Il ne fournit ni la date de frappe des passages, ni leur provenance, ni la durée de travail, ni la distinction entre écriture, collage, déplacement et génération d’un fichier de compilation. Une addition de 25 000 signes dans un diff reste donc seulement une addition de 25 000 signes entre deux instantanés.
+Ces mesures ne reconstituent pas exactement les gestes d’écriture. Git date les commits, pas la frappe. Quand plusieurs jours séparent deux commits, la production peut être répartie entre ces dates : cette répartition est une estimation, pas une observation. Un texte collé depuis l’extérieur du vault peut être considéré comme nouveau, car son origine n’est pas connue de Git.
 
-La taille du projet au dernier commit est directement observable, à condition que `folder` et `history_folders` décrivent tous ses emplacements. En revanche, les métriques historiques produites par l’analyse sont des inférences.
+## Installation
 
-### Pourquoi la méthode précédente échouait
+Prérequis : Git et Python 3.10 ou plus récent.
 
-Jusqu’à la version 18, l’algorithme appliquait un seuil d’import proportionnel au temps écoulé :
+À la racine du dépôt, créez les environnements utilisés par les commandes :
 
-```text
-seuil = threshold_chars × durée_depuis_le_commit_précédent / threshold_window_minutes
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r scripts/requirements.txt
+python3 -m venv .venv-web
 ```
 
-Cette formule ne possède pas de fondement permettant d’identifier la provenance du texte. Après un long intervalle, un collage ou une compilation très volumineuse peut passer sous le seuil et être déclaré « écriture réelle ». Après un intervalle court, une production humaine rapide peut au contraire être déclarée « import ». Le même texte reçoit donc une classe différente selon la fréquence des commits.
+L’environnement `.venv` sert au cache et à l’analyse. `.venv-web` sert à exporter les données et le site ; ces opérations utilisent la bibliothèque standard de Python.
 
-La détection des déplacements reposait sur des blocs séparés par paragraphes, des ancres de quatre mots et une similarité calculée par `SequenceMatcher`. Elle ne constituait pas une filiation du texte : une réécriture pouvait casser les ancres, des formulations répétitives créer de faux rapprochements et un même passage copié plusieurs fois recevoir un crédit incohérent.
+## Configuration
 
-La règle trop large « tout fichier créé puis supprimé = fichier transitoire » pouvait écarter un véritable texte abandonné. Elle a été remplacée par un signal plus strict : seule la réapparition d’un même chemin déjà créé puis supprimé, dont la majorité des fingerprints possède une origine antérieure, caractérise une compilation récurrente.
+### `config.yaml`
 
-### Pourquoi les jours sont artificiels
+Renseignez `vault_path` avec le chemin du dépôt Git de votre vault. Les chemins relatifs sont résolus depuis le dossier du dépôt WritingLog. Les autres valeurs indiquent où conserver le miroir Git et la base SQLite ; les valeurs par défaut les placent dans `.cache/`.
 
-Lorsque plusieurs jours séparent deux commits du dépôt, la production attribuée au second est divisée uniformément entre les dates intermédiaires. Cette ventilation évite un pic sur la date du commit, mais elle **n’observe aucun jour de production réel**. Un texte écrit en une soirée et commité quatre jours plus tard devient quatre journées fictives de même volume. La borne de départ est toujours le commit précédent du vault, tous projets confondus : sa présence indique qu’un instantané intermédiaire existait et empêche d’étaler un texte au-delà.
+### `projet.yml`
 
-Les écarts entre commits ne mesurent pas le temps passé à écrire : l’auteur peut avoir travaillé hors d’Obsidian, laissé l’éditeur ouvert ou effectué plusieurs opérations entre deux sauvegardes. Writing Log ne calcule donc plus aucune durée de travail ni aucun rythme en signes par heure.
+Ce fichier centralise les exclusions, les projets suivis et les fichiers suivis. Un projet utilise un identifiant stable, un titre et le chemin complet de son dossier actuel. Ajoutez les anciens emplacements dans `history_folders` pour conserver son suivi lors des déplacements :
 
-Les suppressions négatives décrivent uniquement des caractères présents dans un instantané puis absents du suivant. Elles peuvent correspondre à une coupe éditoriale, mais aussi à une restructuration, un déplacement non reconnu, une normalisation ou une modification de format.
+```yaml
+Isa:
+  title: "L'expérience humaine"
+  folder: "Isa/manuscrit"
+  history_folders:
+    - "Zone/manuscrit"
+```
 
-### Conséquence
+Les chemins sont relatifs à la racine du vault. Un projet explicitement défini reste suivi même s’il se trouve dans un dossier exclu, par exemple `Archives/Rush/manuscrit`.
 
-Les JSON et graphiques ne permettent pas d’affirmer avec certitude quel jour un passage a été frappé. La production repose désormais sur une règle textuelle vérifiable : un passage déjà connu est une copie ou un déplacement ; un passage inconnu est nouveau. Aucune durée de travail n’est produite.
+Pour suivre un fichier indépendamment de son projet, ajoutez son chemin à la section `Files` :
 
-## Commandes à utiliser
+```yaml
+Files:
+  - id: hypocrisie-editoriale
+    title: "Hypocrisie éditoriale"
+    file: "tcrouzet/2026/10/hypocrisie-editoriale.md"
+    history_files:
+      - "brouillons/ancien-titre.md"
+```
 
-Premier lancement — reconstruire le cache local puis analyser tout l’historique :
+`history_files` est facultatif. S’il est renseigné, il définit les chemins historiques retenus pour ce fichier. Les projets archivés détectés sont listés dans `projets_archives.yml` ; copiez un bloc dans `projet.yml` pour le suivre.
+
+## Utilisation
+
+### Première analyse
+
+Depuis la racine de WritingLog :
 
 ```bash
 ./cache.sh
@@ -48,7 +72,11 @@ Premier lancement — reconstruire le cache local puis analyser tout l’histori
 ./web.sh
 ```
 
-Utilisation courante — synchroniser les nouveaux commits locaux puis lancer l’analyse incrémentale :
+`cache.sh` construit le miroir Git local à partir du dépôt indiqué par `vault_path`. `analyse.sh full` analyse tout l’historique et reconstruit la base d’analyse SQLite. Ce mode peut être long ; il n’est nécessaire qu’au premier traitement ou lorsque l’historique doit être recalculé.
+
+### Mise à jour courante
+
+Après avoir commité du texte dans le vault :
 
 ```bash
 ./cache.sh update
@@ -56,267 +84,45 @@ Utilisation courante — synchroniser les nouveaux commits locaux puis lancer l�
 ./web.sh
 ```
 
-`./cache.sh` supprime et recrée le miroir Git local. `./cache.sh update` conserve le miroir existant et y ajoute les nouveaux commits. Il annonce explicitement s’il n’existe aucun ajout ou combien de commits ont été récupérés, affiche jusqu’aux dix derniers avec leur SHA, leur date et leur message, puis indique le changement de `HEAD`. `./analyse.sh full` purge la base d’analyse et rejoue systématiquement tout l’historique depuis le premier commit. `./analyse.sh` ne traite que les commits postérieurs au dernier commit enregistré. `./analyse.sh files` reconstruit seulement les métriques des chemins déclarés dans `Files`. Ces commandes écrivent exclusivement dans SQLite. `./web.sh` ne lance ni analyse ni serveur : il exporte les JSON depuis SQLite puis génère les fichiers statiques de `site/`.
+`cache.sh update` ajoute au miroir les nouveaux commits du vault. `analyse.sh` traite les commits qui ne figurent pas encore dans la base. `web.sh` exporte les JSON depuis SQLite puis génère le site statique dans `site/`. Il ne lance ni analyse ni serveur.
 
-## Installation
-
-Python 3.10 ou plus récent et Git sont requis.
-
-Les environnements sont séparés : `.venv/` est réservé à l’analyse et `.venv-web/` à la génération statique du site. Cette génération n’utilise que la bibliothèque standard Python.
-
-```bash
-python -m pip install -r scripts/requirements.txt
-```
-
-Dans `config.yaml`, indiquez `vault_path`. Un chemin relatif est résolu depuis le dossier qui contient la configuration, pas depuis le terminal. Ajustez ensuite les dossiers exclus et les paramètres du winnowing.
-
-`history_repo` peut pointer vers un miroir Git local dédié. La configuration fournie utilise `.cache/vault-history.git`. Créez ou actualisez ce miroir vous-même avant l’analyse :
-
-```bash
-.venv/bin/python scripts/cache_history.py
-```
-
-Raccourcis à la racine : `./cache.sh` supprime et reconstruit le cache ; `./cache.sh update` synchronise le miroir existant.
-
-La reconstruction crée une copie Git indépendante de tout l’historique local (`--no-hardlinks`) et vérifie le nombre de commits. Un cache ancien ou interrompu est supprimé par `rebuild`, sans sauvegarde résiduelle. Aucun accès réseau n’est nécessaire lorsque `vault_path` est un dépôt local.
-
-Dans `projet.yml`, chaque clé est l’identifiant stable d’un projet et `folder` indique son emplacement complet dans le vault :
-
-```yaml
-mon-roman:
-  title: "Mon roman"
-  folder: "mon-roman/manuscrit"
-  history_folders:
-    - "ancien-dossier/manuscrit"
-  genre: "roman"
-  objectif_signes: 500000
-```
-
-`title` est affiché dans le dashboard. `folder` est le chemin complet du dossier actuellement suivi depuis la racine du vault. `history_folders` liste ses anciens chemins. Le mapping complet sert à la classification et à la filiation du texte. Pour la taille, une seule de ces racines représente le manuscrit actif à un instant donné. Une définition explicite prime sur `excluded_folders` : `folder: "Archives/Rush/manuscrit"` suit donc Rush sous Archives. Tous les autres champs sont transmis sans modification à `projects.json`.
-
-La section réservée `Files` suit un fichier indépendamment du projet qui le contient. Un chemin simple utilise le nom du fichier comme titre. La forme détaillée fixe un identifiant partageable et recense ses anciens noms :
-
-```yaml
-Files:
-  - "tcrouzet/2026/10/hypocrisie-editoriale.md"
-  - id: mon-essai
-    title: "Mon essai"
-    file: "essais/version-finale.md"
-    history_files:
-      - "brouillons/ancien-titre.md"
-```
-
-Sans `history_files`, l’analyse remonte automatiquement les renommages reconnus par Git depuis le chemin courant. Lorsque `history_files` est présent, il est autoritaire : seuls les chemins indiqués représentent ce fichier au fil de l’historique. Après une modification de `Files`, lancez `./analyse.sh files`, puis `./web.sh`.
-
-Les projets qui n’existent plus à la racine du vault — notamment ceux déplacés dans un dossier exclu comme `Archives` — sont recensés dans `projets_archives.yml`. Ils redeviennent visibles et suivis dès que leur bloc est copié dans `projet.yml`.
-
-## Comment fonctionne Writing Log
-
-### 1. Le cache ne contient que l’historique Git
-
-`cache.sh` construit un miroir Git indépendant dans `.cache/vault-history.git`. L’analyse travaille exclusivement sur ce miroir et ne modifie jamais le vault source.
-
-`./cache.sh update` copie les nouveaux commits du dépôt local configuré par `vault_path`. Il ne lit pas les modifications non commitées du répertoire de travail et ne lance aucun accès réseau lorsque `vault_path` est local. Une modification Obsidian ne devient donc visible qu’après sa présence dans un commit, puis une mise à jour du cache.
-
-### 2. Chaque fichier est rattaché à un projet stable
-
-L’identifiant YAML du projet reste stable même si son dossier change. Pour chaque chemin Markdown rencontré dans l’historique, l’analyse cherche successivement :
-
-1. le chemin actuel `folder` ;
-2. les anciens chemins `history_folders` ;
-3. à défaut, le dossier de premier niveau pour les projets non configurés.
-
-Une correspondance explicite dans `projet.yml` est prioritaire sur `excluded_folders`. Le chemin racine qui a produit chaque valeur — par exemple `Isa/manuscrit` ou `Zone/manuscrit` — est conservé dans les données quotidiennes et affiché dans l’infobulle du graphique.
-
-Pour un projet découvert automatiquement et déjà rempli lors de sa première
-apparition, ce premier instantané initialise uniquement sa taille. Il est
-enregistré comme `baseline_chars` et ne compte pas dans les signes produits du
-premier jour. Seules les modifications des commits suivants alimentent la
-production. Les projets explicitement déclarés dans `projet.yml` conservent
-leur historique normal dès leur premier commit suivi.
-
-La filiation textuelle ne s’arrête pas à cette liste statique. Dès qu’un fichier attribué à un projet est renommé ou déplacé, il conserve cet identifiant même si sa destination — par exemple `Isa/archives/Maison` ou `Isa/archives/manuscritV1-2025` — n’était pas encore déclarée dans `history_folders`. Le registre des fichiers propage ensuite cette attribution aux modifications et à la suppression éventuelle du nouveau chemin : son texte reste reconnaissable et son activité reste rattachée au bon projet.
-
-La **taille du manuscrit** obéit à une règle distincte. Une seule racine est active. La simple apparition d’une V2 incomplète ne suffit pas à abandonner la V1 : le changement intervient lorsque l’ancienne racine est transférée ou disparaît, ou lorsque le dossier courant reçoit effectivement le manuscrit. Les anciennes versions rangées dans un sous-dossier `archives` ne comptent jamais, sauf lorsque le `folder` courant du projet se trouve lui-même sous `Archives`.
-
-La série logique est ensuite raccordée à rebours depuis la taille physique actuelle. À l’intérieur d’une même racine, chaque hausse et chaque baisse réelle est conservée exactement. Au seul instant d’un changement de racine, l’écart de taille entre les deux dossiers est neutralisé : une copie progressive de V1 vers V2 ne produit donc ni gouffre ni montagne artificielle. La mesure physique avant raccordement reste exportée dans `taille_brute` pour audit ; le graphique utilise `taille_signes`.
-
-### 3. Un index winnowé persistant représente le texte déjà rencontré
-
-Le texte ajouté est normalisé en Unicode NFKC, passé en minuscules et ses espaces sont compactés. Il est ensuite découpé en fenêtres glissantes de `internal_detection.gram_chars` caractères — 36 par défaut. Chaque fenêtre reçoit un hash BLAKE2b de 64 bits.
-
-Le winnowing conserve seulement le hash minimal de chaque fenêtre de sélection de `internal_detection.selection_chars` caractères — 180 par défaut. L’index SQLite `.cache/fingerprints.sqlite3` stocke ces seuls fingerprints avec leur projet, fichier et commit :
-
-```sql
-CREATE TABLE fingerprints (
-    hash TEXT NOT NULL,
-    project TEXT NOT NULL,
-    file TEXT NOT NULL,
-    commit_hash TEXT NOT NULL,
-    removed_at_commit TEXT
-);
-CREATE INDEX idx_hash ON fingerprints(hash);
-```
-
-Quand un fichier change, son contenu complet sert uniquement à calculer le diff textuel. Le winnowing n’est appliqué qu’aux fragments `added_parts` et `removed_parts` produits par ce diff. Les fingerprints ajoutés incrémentent `active_file_hashes`; les fingerprints supprimés le décrémentent. Le contenu intégral n’est winnowé qu’à la première apparition du fichier, puisqu’il constitue alors lui-même l’unique fragment ajouté. Un renommage transfère directement les fingerprints actifs entre les deux chemins par SQL.
-
-L’index complet n’est jamais rechargé ni recalculé à chaque commit. Lorsqu’un fingerprint n’est plus actif dans un fichier, sa ligne historique reste dans `fingerprints` et reçoit le commit dans `removed_at_commit`; elle peut donc identifier une réapparition future. La table auxiliaire mémorise un compteur d’occurrences par couple fichier/hash afin qu’une suppression partielle ne fasse pas disparaître un fingerprint encore présent ailleurs dans le même fichier.
-
-SQLite conserve deux chronologies relationnelles distinctes. `commits` contient chaque commit global traité. `project_commits` contient un instantané pour chaque couple commit/projet à partir de la première apparition du projet, même lorsque le commit ne modifie pas ce projet : taille logique, `raw_size`, racine active et indicateur `touched`. Sa clé primaire `(commit_hash, project)` empêche les doublons. `size_evolution.json` est exporté directement depuis cette table, sans regroupement quotidien, avec le timestamp complet et le hash du commit.
-
-### 4. Les changements sont classés
-
-Tous les fingerprints de tous les fragments ajoutés par un même commit sont d’abord réunis. L’analyse effectue ensuite une seule recherche de recouvrement pour le commit entier — une paire de requêtes dans la limite maximale de paramètres acceptée par SQLite — puis répartit en mémoire les résultats par fragment et par fichier. Les fragments sont découpés en petits groupes de phrases, en conservant exactement tous les caractères. Cette granularité empêche la correction d’un mot de recréditer tout un long paragraphe. L’ensemble des fingerprints connus est enrichi après chaque bloc : si deux fichiers ou deux passages identiques apparaissent dans le même commit, seule la première occurrence peut être considérée comme nouvelle.
-
-```sql
-SELECT DISTINCT hash FROM fingerprints WHERE hash IN (...);
-```
-
-Le ratio est le nombre de fingerprints du bloc déjà connus divisé par le nombre total de ses fingerprints. Pour un petit groupe de phrases, une seule empreinte exacte de 36 caractères suffit à conserver la filiation : le passage est classé comme texte déjà existant ou modifié. Exiger 85 % à ce niveau recréditerait tout le groupe dès que quelques mots ont été corrigés. Les toutes premières provenances correspondantes sont exportées dans `duplications.json` pour contrôle.
-
-Un fichier nouvellement créé est d’abord testé comme un bloc unique. Si son recouvrement global atteint le seuil, il est traité intégralement comme une compilation et aucun de ses passages légèrement modifiés ou de ses séparateurs n’est recrédité en production. Si le fichier complet n’atteint pas le seuil, l’analyse descend au niveau des groupes de phrases afin de conserver les passages réellement nouveaux et d’écarter seulement les copies.
-
-Le cycle de vie du chemin est également mémorisé, ainsi qu’un SHA-256 du contenu intégral lors de la création. Si un fichier apparaît rempli puis si le même contenu exact disparaît — sous le même chemin ou après un renommage — cette apparition est un artefact transitoire : elle est retirée rétroactivement de la production, des duplications publiées et de toute la courbe de taille, sans aucun seuil. Ses fingerprints restent uniquement dans SQLite afin de reconnaître une réapparition future. Lorsqu’un fichier réapparaît fortement modifié, la majorité de fingerprints antérieurs reste le signal secondaire permettant de reconnaître une compilation récurrente.
-
-Les compilations dont le nom change à chaque export sont traitées rétroactivement. Leur cycle de vie suit aussi les renommages et toutes les retouches intermédiaires : chaque contribution des commits `M` et `R` reste rattachée à la création. Au moment de la suppression, le recouvrement est recalculé sur le contenu final par une nouvelle interrogation de SQLite ; les propres chemins du cycle de vie sont exclus pour empêcher le fichier de se reconnaître lui-même. Le verdict attend aussi que tous les ajouts du commit courant aient été examinés : une fusion supprimée dans le même commit que la création de ses chapitres reconnaît donc immédiatement ces nouveaux fichiers. Cette vérification réutilise les fingerprints des fragments déjà calculés et ne rehashe jamais le contenu intégral d’un fichier `M` ou `R`. Si le contenu final possède au moins 50 % de fingerprints connus ailleurs, toutes les contributions de cette compilation sont retirées de la production et transférées vers les duplications internes. Le ratio réellement utilisé est conservé dans `temporary_compilations` pour audit. Sa taille est retirée uniquement des points compris entre sa création incluse et sa suppression exclue ; après la suppression, la comptabilité normale a déjà retiré le fichier et aucune seconde soustraction n’est appliquée.
-
-Enfin, Git peut rater un renommage lorsque chaque longue ligne ou chaque paragraphe a été légèrement corrigé. Pour chaque commit comportant simultanément des créations et suppressions Markdown dans le même dossier, Writing Log compare leurs ensembles de fingerprints. Deux fichiers de tailles proches partageant au moins 70 % des fingerprints du plus petit sont appariés comme un renommage édité. Le diff porte alors sur l’ancien et le nouveau contenu : le fichier de destination n’est jamais compté intégralement comme une création.
-
-La classification ne possède plus que deux voies :
-
-- au moins un fingerprint du groupe possède une origine : **texte existant, corrigé, déplacé ou dupliqué**, exclu de la production ;
-- aucun fingerprint du groupe n’a jamais été rencontré : **texte nouveau**, inclus dans la production.
-
-Le rythme en signes par minute n’est plus un critère de classification. Le champ historique `import_chars` est conservé pour compatibilité, mais vaut toujours zéro dans une reconstruction neuve. Un collage extérieur dont le texte n’a jamais existé dans le vault est donc considéré comme nouveau : les fingerprints ne peuvent pas en connaître la provenance externe. Dans les deux cas, les fingerprints du bloc sont ajoutés avec leur nouvelle provenance. La taille logique part du contenu physique, puis retire les fichiers reconnus comme compilations ou doublons.
-
-Les suppressions effectuées à l’intérieur d’un fichier suivi constituent une quatrième mesure : l’**activité éditoriale négative**. Pour chaque fragment disparu, Writing Log recherche ses fingerprints dans les provenances persistantes des autres fichiers du vault et dans les occurrences encore actives. Une empreinte retrouvée suffit à identifier une copie, un déplacement ou une fusion ; le fragment n’entre alors pas dans `signes_supprimes`. La propre provenance historique du fichier supprimé est explicitement ignorée, sinon toute vraie coupe se reconnaîtrait elle-même. Cette recherche fonctionne si l’autre occurrence précède, accompagne ou suit la suppression. Dans ce dernier cas, une analyse incrémentale corrige rétroactivement l’événement ancien dès la réapparition du texte.
-
-Seule une disparition sans autre provenance est exportée comme quantité positive `signes_supprimes`. Une occurrence identique encore active dans le même fichier suffit également à écarter la suppression : retirer la seconde copie d’un paragraphe ne crée donc aucune production négative. La disparition complète d’un fichier reste exclue, car les fichiers temporaires de fusion apparaissent puis disparaissent fréquemment. Un contrôle de cohérence avertit sur stderr si le total supprimé d’un projet dépasse tous les signes ajoutés au fil de son histoire. Cette mesure éditoriale reste disponible dans les JSON, mais elle n’est jamais injectée dans le graphique de production.
-
-La comparaison commence par retirer les grands préfixes et suffixes identiques, puis travaille sur les zones modifiées au niveau des mots et des caractères. Changer un mot dans un paragraphe ne transforme donc pas tout le paragraphe en texte nouveau.
-
-Une fusion comme `zone.md` est reconnue par ses fingerprints déjà présents, sans recharger les chapitres sources ni comparer le nouveau fichier à tous les fichiers historiques.
-
-### 5. Git donne une fenêtre, pas toujours un jour d’écriture
-
-Git enregistre la date du commit, pas la date de frappe de chaque caractère. Writing Log n’attribue pas tout le travail au dernier jour : les signes sont répartis uniformément entre le lendemain du commit global précédent et le jour du commit courant. Un commit concernant un autre projet interrompt donc l’intervalle, puisqu’un texte déjà présent à cet instant aurait été inclus dans cet instantané du vault.
-
-Cette répartition est une estimation imposée par l’absence de commits intermédiaires. Elle préserve exactement le total, mais ne prétend pas reconstruire l’heure ou le jour exact de chaque phrase.
-
-Le passage depuis une base ayant calculé les intervalles séparément par projet exige une reconstruction avec `./analyse.sh full`. Les analyses incrémentales suivantes reprennent automatiquement à partir de la date du dernier commit global enregistré dans SQLite.
-
-### 6. Les sorties sont reconstruites depuis les événements
-
-Les événements classés alimentent ensuite :
-
-- les productions quotidiennes, hebdomadaires et mensuelles ;
-- les signes supprimés pendant le travail éditorial, affichés sous l’axe zéro ;
-- la production cumulée, qui additionne uniquement l’écriture réelle ;
-- la taille logique actuelle de tous les chemins configurés dans `folder` et `history_folders`, compilations et doublons exclus.
-
-La production cumulée et la taille actuelle sont volontairement différentes : la première mesure les caractères classés comme écrits au fil de l’historique, tandis que la seconde mesure le contenu unique du manuscrit aujourd’hui, sans ses assemblages temporaires.
-
-## Générer les données
-
-Deux modes sont volontairement séparés. La reconstruction complète rejoue tout l’historique et se lance uniquement en local, sans contrainte de durée :
-
-```bash
-python scripts/analyze_vault.py full
-```
-
-Raccourci à la racine : `./analyse.sh full`. `./analyse.sh` lance uniquement le mode incrémental.
-
-Elle effectue une seule passe chronologique. Les métadonnées Git sont lues par lots et chaque commit ne charge que les blobs des fichiers modifiés. Le coût du fingerprinting est proportionnel aux fragments réellement ajoutés ou supprimés, jamais à la taille totale répétée du fichier. La recherche SQLite est regroupée au niveau du commit. Dans un terminal, une barre persistante affiche en continu le pourcentage, le nombre de commits, la vitesse, le temps écoulé et l’ETA. Dans des logs redirigés, un jalon est écrit tous les 250 commits.
-
-Un `full` interrompu ne conserve aucun état partiel : sa transaction SQLite est abandonnée. Le prochain `full` purge de nouveau l’index et repart du premier commit.
-
-Le mode incrémental n’utilise aucun numéro de version d’analyse. La table SQLite `commits` contient chaque commit déjà traité, son horodatage Git et la date de son analyse. Son dernier enregistrement est le curseur de reprise ; il doit correspondre au `last_commit` de la table SQLite `analysis_state`. La table `fingerprint_origins` contient une seule ligne par hash et l’attache définitivement au premier commit, projet et fichier où il a été rencontré. La table `fingerprints` conserve séparément toutes ses occurrences successives. Git est alors interrogé directement sur la plage `last_commit..HEAD` : la liste de l’historique antérieur n’est pas relue. Dans cette plage, seuls les fichiers modifiés sont chargés :
-
-```bash
-python scripts/analyze_vault.py incremental
-```
-
-Il refuse de démarrer si l’état manque ou ne correspond plus à la configuration, afin de ne jamais déclencher silencieusement une reconstruction complète.
-
-Le mode fichier relit l’historique Git des seuls chemins configurés et conserve les événements, tailles et fingerprints des projets. Il réutilise les mêmes fonctions de diff, winnowing et classification que l’analyse générale ; l’index SQLite existant indique quels fingerprints étaient déjà connus au moment de chaque commit :
+Après avoir changé uniquement la liste des fichiers de `projet.yml`, utilisez le mode ciblé, qui nécessite une base d’analyse existante :
 
 ```bash
 ./analyse.sh files
-```
-
-Après une modification de la logique de classification, des exclusions, extensions, seuils ou réglages de session, reconstruisez les données. Une analyse incrémentale ne corrige jamais les événements historiques déjà produits :
-
-```bash
-python scripts/analyze_vault.py full
-```
-
-Options utiles :
-
-```bash
-python scripts/analyze_vault.py full --config /chemin/config.yaml
-python scripts/analyze_vault.py incremental --dry-run
-```
-
-`--dry-run` analyse et valide les données sans enregistrer le nouvel état dans SQLite. Aucun JSON n’est produit par l’analyse.
-
-Chaque export web génère aussi `projets_archives.yml`. Ce fichier recense les projets historiques désormais déplacés sous `Archives`, avec leur `folder` complet (le sous-dossier `manuscrit` est choisi automatiquement lorsqu’il existe). Pour en suivre un, copiez son bloc dans `projet.yml`, modifiez éventuellement son `title`, puis relancez une analyse complète et l’export.
-
-## Générer le site web
-
-L’analyse SQLite et la génération du site web sont deux commandes indépendantes :
-
-```bash
-./analyse.sh
 ./web.sh
 ```
 
-`./analyse.sh` met à jour exclusivement `.cache/fingerprints.sqlite3` et ne touche jamais `site/`. La base contient l’état analytique brut et incrémental dans `analysis_state` ; aucune vue web ni aucun JSON n’y est sérialisé.
-
-Les deux opérations web sont elles-mêmes séparées :
+Après une modification des projets, des exclusions ou des règles d’analyse, reconstruisez la base pour recalculer tout l’historique :
 
 ```bash
-.venv-web/bin/python scripts/export_data.py
-.venv-web/bin/python scripts/web.py
+./analyse.sh full
+./web.sh
 ```
 
-`export_data.py` lit SQLite, calcule les agrégats d’affichage et remplace `site/data/*.json`. `web.py` copie uniquement HTML, CSS, JavaScript et images depuis `web/` vers `site/`. `./web.sh` enchaîne ces deux commandes par commodité, sans relire Git, reclasser le texte ou démarrer un serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
+### Ouvrir le tableau de bord
 
-Le filtre principal permet d’isoler un projet ou un fichier suivi. Le graphique « Production » affiche toujours tout l’historique et regroupe les vues jour, semaine et mois dans un sélecteur unique. Pour un fichier, le sélecteur ajoute les vues heure et minute, calculées directement depuis les timestamps des commits sans ventilation. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin suivi. Le zoom et le défilement horizontal permettent d’examiner une portion de cette chronologie complète. La sélection est inscrite dans l’URL sous la forme `?project=Isa` ou `?file=mon-essai` ; cette URL ouvre directement le tableau de bord correspondant.
+Pour le consulter localement, démarrez un serveur HTTP standard depuis la racine du dépôt :
 
-La sélection d’un fichier affiche aussi « Activité horaire ». Cette grille utilise directement l’heure de chaque commit, sans ventilation entre les commits. Chaque jour occupe quatre colonnes successives de six heures sur l’axe horizontal ; chaque case représente une heure. Les cases sans activité restent blanches, les séparations entre jours sont renforcées et l’intensité des autres cases représente les signes nouveaux de l’heure. L’infobulle donne le volume et le nombre de commits.
+```bash
+python3 -m http.server 8000 --directory site
+```
 
-Le temps d’écriture affiché pour un fichier est une estimation fondée sur sa cadence de commits. La médiane des intervalles entre ses commits définit une cadence. Un écart supérieur à 4 cadences ouvre une nouvelle session ; les intervalles plus courts sont additionnés et le premier commit de chaque session reçoit une cadence. Le ratio « Signes par heure » divise la production réelle par cette durée. Avec moins de 2 commits, les 2 valeurs restent absentes.
+Ouvrez ensuite `http://localhost:8000`. Pour publier le tableau de bord, publiez le contenu de `site/` sur un hébergement statique. Vérifiez les données exportées avant publication : elles contiennent des noms de projets, des chemins de fichiers et des dates de commits.
 
-L’histogramme placé en bas, « Production par jour de la semaine », additionne sur tout l’historique les signes réellement produits du lundi au dimanche pour le projet sélectionné. Son infobulle indique aussi la moyenne par occurrence de ce jour et le nombre de jours actifs, afin de distinguer volume cumulé et régularité.
+## Explorer les résultats
 
-Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. Lorsque deux commits globaux sont séparés de plusieurs jours et que la taille change au second, l’export ajoute un point estimé pour chaque journée intermédiaire et répartit exactement la variation entière entre ces jours ; les instantanés Git d’origine restent identifiés séparément. Son axe vertical part de la plus petite valeur utile affichée au lieu d’être systématiquement forcé à zéro. Son sélecteur choisit uniquement la granularité — dernier état de chaque jour, semaine ISO, mois ou année — et ne coupe jamais la chronologie : tout l’historique reste affiché. Pour un fichier suivi, toutes les granularités utilisent uniquement les commits qui modifient ce fichier. L’infobulle donne sa taille, la variation signée depuis son commit précédent et cette variation ramenée à 1 heure. Les JSON conservent toujours les points de chaque commit.
+Le sélecteur en haut de page permet de choisir tous les projets, un projet ou un fichier suivi. Le choix d’un projet ou d’un fichier est conservé dans l’URL afin de pouvoir partager une vue précise.
 
-Les boutons `−` et `+` règlent indépendamment l’échelle horizontale de chaque graphique. Dès que le tracé devient plus large que la page, il se parcourt horizontalement ; le niveau de zoom est conservé dans `localStorage`. Les infobulles indiquent le dossier analysé, notamment pour contrôler les changements de racine historique.
+Les graphiques **Production** et **Taille** ont chacun leur propre granularité, zoom et défilement horizontal. Les boutons `−` et `+` changent l’échelle ; faites défiler le graphique pour parcourir la période. Le bouton de téléchargement exporte la vue visible en PNG ou SVG.
 
-Le bouton placé en haut à droite de chaque graphique permet de télécharger son rendu en PNG ou en SVG vectoriel. Le nom du fichier reprend le projet sélectionné et le titre du graphique.
+Pour un fichier suivi, le tableau de bord affiche aussi sa grille d’activité horaire. Les cases représentent l’activité observée aux dates de commit ; sélectionnez une case pour afficher ses détails. Le réglage `−` ou `+` change la taille des tranches horaires.
 
-Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`, mais le premier affichage nécessite un accès réseau pour charger cette bibliothèque.
+## Fichiers produits
 
-## Limites et confidentialité
+- `.cache/vault-history.git/` : miroir de l’historique Git source.
+- `.cache/fingerprints.sqlite3` : base d’analyse et index du texte déjà rencontré.
+- `site/data/` : données JSON consommées par le tableau de bord.
+- `site/` : site statique généré.
 
-- Un signe est un caractère du Markdown brut après décodage UTF-8 ; ce n’est ni un mot ni une lettre normalisée.
-- Sans commit intermédiaire, aucune méthode ne peut retrouver exactement le jour de frappe. Writing Log affiche alors la répartition estimée décrite plus haut.
-- La détection des duplications dépend de l’historique disponible. Un texte provenant de l’extérieur du vault est impossible à distinguer d’un texte frappé : tous deux possèdent des fingerprints nouveaux.
-- La table SQLite `analysis_state` mémorise les tailles et les événements nécessaires au traitement incrémental. Elle reste dans `.cache/` et n’est jamais publiée.
-- `duplications.json` expose volontairement les chemins des fichiers et commits d’origine afin de rendre chaque rapprochement contrôlable. Aucun contenu Markdown n’est exporté.
-
-## Structure des sorties
-
-- `overview.json` : totaux et fraîcheur des données ;
-- `projects.json` : totaux d’écriture réelle, suppressions éditoriales, taille actuelle et métadonnées de chaque projet ;
-- `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
-- `size_evolution.json` : tailles logique (`taille_signes`) et brute (`taille_brute`) du manuscrit à chaque commit global, avec timestamp, hash, dossier analysé et indicateur de modification du projet ;
-- `files.json` : métadonnées, production totale et taille actuelle des fichiers suivis ;
-- `file_daily.json`, `file_weekly.json`, `file_monthly.json` : production des fichiers suivis par période ;
-- `file_size_evolution.json` : taille et chemin de chaque fichier suivi à chaque commit global ;
-- `file_activity.json` : production exacte de chaque commit touchant un fichier suivi, avec timestamp et chemin ;
-- `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
-
-`state.json` n’est plus généré : l’état interne reste exclusivement dans SQLite.
-
-Le dossier `site/` est autonome : il peut être copié et servi tel quel.
+L’analyse met à jour SQLite ; l’export web transforme cette base en JSON et en fichiers de site. Le navigateur affiche les données et ne classe pas le texte.
