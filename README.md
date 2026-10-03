@@ -4,6 +4,9 @@ WritingLog transforme l’historique Git d’un vault Obsidian en tableau de bor
 
 WritingLog analyse les versions enregistrées dans Git. Il ne lit pas les modifications non commitées et ne mesure pas la frappe en direct.
 
+Version web : [https://tcrouzet.github.io/WritingLog/](https://tcrouzet.github.io/WritingLog/)
+
+
 ## Ce que montrent les graphiques
 
 - **Signes produits** : texte considéré comme nouveau par rapport au texte déjà rencontré dans l’historique du vault. Les passages reconnus comme déplacés ou dupliqués ne sont pas comptés comme nouvelle production.
