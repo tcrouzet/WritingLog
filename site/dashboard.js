@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const files = ["overview", "projects", "daily", "weekly", "monthly", "size_evolution"];
+  const files = ["overview", "projects", "daily", "weekly", "monthly", "size_evolution", "files", "file_daily", "file_weekly", "file_monthly", "file_size_evolution", "file_activity"];
   const charts = {};
   const palette = ["#1a73e8", "#34a853", "#fbbc04", "#ea4335", "#9334e6", "#00acc1", "#fa7b17", "#5f6368"];
   const colors = new Map();
@@ -12,17 +12,32 @@
   let selectedProject = "all";
   let productionGranularity = "day";
   let sizeGranularity = "day";
+  let activityCellMinutes = 60;
   const zooms = { daily: 1, size: 1 };
+  const activityResolutions = [60, 30, 15];
   const weekdayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+  const isDayBoundary = context => context.tick?.value !== undefined
+    && new Date(context.tick.value).getUTCHours() === 0;
 
-  const title = id => data.projects.find(project => project.id === id)?.title || id;
+  const selectionKind = () => selectedProject.startsWith("file:") ? "file" : selectedProject === "all" ? "all" : "project";
+  const selectionId = () => selectedProject.replace(/^(project|file):/, "");
+  const title = value => {
+    const id = value.replace(/^(project|file):/, "");
+    const items = value.startsWith("file:") ? data.files : data.projects;
+    return items.find(item => item.id === id)?.title || id;
+  };
   const color = id => {
     if (id === "__all__") return palette[0];
     if (!colors.has(id)) colors.set(id, palette[colors.size % palette.length]);
     return colors.get(id);
   };
   function latestDate() {
-    const values = [...data.daily.map(row => row.periode), ...data.size_evolution.map(row => row.date)].sort();
+    const values = selectionKind() === "file"
+      ? [
+          ...data.file_daily.filter(row => row.fichier === selectionId()).map(row => row.periode),
+          ...data.file_size_evolution.filter(row => row.fichier === selectionId()).map(row => row.date)
+        ].sort()
+      : [...data.daily.map(row => row.periode), ...data.size_evolution.map(row => row.date)].sort();
     return values.at(-1) || new Date().toISOString().slice(0, 10);
   }
 
@@ -35,7 +50,32 @@
   }
 
   function visibleProjects() {
-    return data.projects.filter(project => selectedProject === "all" || project.id === selectedProject);
+    if (selectionKind() === "file") return [];
+    return data.projects.filter(project => selectedProject === "all" || project.id === selectionId());
+  }
+
+  function selectedFile() {
+    return selectionKind() === "file" ? data.files.find(file => file.id === selectionId()) : null;
+  }
+
+  function productionRows(kind) {
+    if (selectionKind() !== "file") return kind === "week" ? data.weekly : kind === "month" ? data.monthly : data.daily;
+    if (kind === "minute" || kind === "hour") {
+      const buckets = new Map();
+      for (const row of data.file_activity.filter(item => item.fichier === selectionId())) {
+        const offset = row.timestamp.slice(19);
+        const period = kind === "hour"
+          ? `${row.timestamp.slice(0, 13)}:00:00${offset}`
+          : `${row.timestamp.slice(0, 16)}:00${offset}`;
+        const bucket = buckets.get(period) || { periode: period, projet: row.fichier, signes_reels: 0, dossiers: new Set() };
+        bucket.signes_reels += Number(row.signes_reels) || 0;
+        for (const path of row.chemins || []) bucket.dossiers.add(path);
+        buckets.set(period, bucket);
+      }
+      return [...buckets.values()].map(row => ({ ...row, dossiers: [...row.dossiers].sort() }));
+    }
+    const rows = kind === "week" ? data.file_weekly : kind === "month" ? data.file_monthly : data.file_daily;
+    return rows.map(row => ({ ...row, projet: row.fichier, dossiers: row.chemins || [] }));
   }
 
   function periodTimestamp(period) {
@@ -51,25 +91,38 @@
     return Date.parse(period);
   }
 
-  function temporalAxis(rows, field = "periode") {
+  function temporalAxis(rows, field = "periode", precision = null, zoomName = null) {
     const values = rows.map(row => periodTimestamp(row[field])).filter(Number.isFinite).sort((a, b) => a - b);
     if (!values.length) return null;
     const min = values[0];
     const max = values.at(-1);
     const spanDays = Math.max(1, (max - min) / 86400000);
-    const unit = spanDays <= 100 ? "week" : spanDays <= 730 ? "month" : "year";
+    const unit = precision === "minute" || precision === "hour"
+      ? "hour"
+      : precision === "day" && selectionKind() === "file"
+        ? "day"
+      : spanDays <= 100 ? "week" : spanDays <= 730 ? "month" : "year";
     const cursor = new Date(min);
-    cursor.setUTCHours(12, 0, 0, 0);
-    if (unit === "week") {
+    if (unit === "hour") {
+      cursor.setUTCHours(cursor.getUTCHours() + 1, 0, 0, 0);
+    } else if (unit === "day") {
+      cursor.setUTCHours(12, 0, 0, 0);
+      if (cursor.getTime() < min) cursor.setUTCDate(cursor.getUTCDate() + 1);
+    } else if (unit === "week") {
+      cursor.setUTCHours(12, 0, 0, 0);
       cursor.setUTCDate(cursor.getUTCDate() + ((8 - (cursor.getUTCDay() || 7)) % 7));
     } else if (unit === "month") {
+      cursor.setUTCHours(12, 0, 0, 0);
       cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1);
     } else {
+      cursor.setUTCHours(12, 0, 0, 0);
       cursor.setUTCFullYear(cursor.getUTCFullYear() + 1, 0, 1);
     }
     const ticks = [];
     while (cursor.getTime() <= max) {
       ticks.push(cursor.getTime());
+      if (unit === "hour") cursor.setUTCHours(cursor.getUTCHours() + 1);
+      if (unit === "day") cursor.setUTCDate(cursor.getUTCDate() + 1);
       if (unit === "week") cursor.setUTCDate(cursor.getUTCDate() + 7);
       if (unit === "month") cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1);
       if (unit === "year") cursor.setUTCFullYear(cursor.getUTCFullYear() + 1, 0, 1);
@@ -83,10 +136,21 @@
       const week = Math.ceil((((thursday - start) / 86400000) + 1) / 7);
       return `S${String(week).padStart(2, "0")}`;
     };
-    const label = value => unit === "week"
-      ? weekLabel(value)
-      : new Intl.DateTimeFormat("fr-FR", unit === "month" ? { month: "short", year: "numeric", timeZone: "UTC" } : { year: "numeric", timeZone: "UTC" }).format(new Date(value));
-    return { min, max, ticks, label };
+    const label = value => unit === "hour"
+      ? (() => {
+          const date = new Date(value);
+          const hour = date.getUTCHours();
+          const zoom = zoomName ? zooms[zoomName] : 1;
+          const interval = zoom >= 4 ? 1 : zoom >= 2 ? 2 : 6;
+          if (hour === 0) return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(date);
+          return hour % interval === 0 ? `${hour} h` : "";
+        })()
+      : unit === "day"
+        ? new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(value))
+        : unit === "week"
+          ? weekLabel(value)
+          : new Intl.DateTimeFormat("fr-FR", unit === "month" ? { month: "short", year: "numeric", timeZone: "UTC" } : { year: "numeric", timeZone: "UTC" }).format(new Date(value));
+    return { min, max, ticks, label, unit };
   }
 
   function commonOptions(stacked = true, temporal = null) {
@@ -112,7 +176,11 @@
           max: temporal.max,
           afterBuildTicks: scale => { scale.ticks = temporal.ticks.map(value => ({ value })); },
           border: { display: false },
-          grid: { color: "#dadce0", borderDash: [4, 4], lineWidth: 1 },
+          grid: {
+            color: context => temporal.unit === "day" || isDayBoundary(context) ? "#9aa0a6" : "#e8eaed",
+            borderDash: [],
+            lineWidth: context => temporal.unit === "day" || isDayBoundary(context) ? 1.5 : 1
+          },
           ticks: { maxRotation: 0, color: "#5f6368", callback: value => temporal.label(value) }
         } : { stacked, border: { display: false }, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, color: "#5f6368" } },
         y: {
@@ -128,6 +196,7 @@
   }
 
   function productionPeriodLabel(period, kind) {
+    if (kind === "minute" || kind === "hour") return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" }).format(new Date(period));
     if (kind === "week") return `Semaine ${period}`;
     if (kind === "month") return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${period}-01T12:00:00Z`));
     return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${period}T12:00:00Z`));
@@ -149,16 +218,17 @@
   }
 
   function productionChart(canvas, rows, kind) {
-    const visibleIds = new Set(visibleProjects().map(project => project.id));
+    const file = selectedFile();
+    const visibleIds = new Set(file ? [file.id] : visibleProjects().map(project => project.id));
     const visibleRows = rows.filter(row => visibleIds.has(row.projet));
     const series = selectedProject === "all"
       ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(visibleRows) }]
-      : visibleProjects().map(project => ({
+      : (file ? [file] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
           rows: visibleRows.filter(row => row.projet === project.id)
         }));
-    const temporal = temporalAxis(series.flatMap(item => item.rows));
+    const temporal = temporalAxis(series.flatMap(item => item.rows), "periode", kind, "daily");
     const datasets = series.map(item => {
       const point = row => ({
         x: periodTimestamp(row.periode),
@@ -177,7 +247,7 @@
     });
     const options = commonOptions(true, temporal);
     if (temporal) {
-      const padding = kind === "week" ? 3.5 * 86400000 : kind === "month" ? 15 * 86400000 : 0.5 * 86400000;
+      const padding = kind === "minute" ? 30000 : kind === "hour" ? 1800000 : kind === "week" ? 3.5 * 86400000 : kind === "month" ? 15 * 86400000 : 0.5 * 86400000;
       options.scales.x.min = temporal.min - padding;
       options.scales.x.max = temporal.max + padding;
     }
@@ -185,6 +255,7 @@
       title: items => productionPeriodLabel(items[0].raw.period, kind),
       label: context => `Produits : ${formatter.format(context.raw.chars)} signes`,
       afterLabel: context => {
+        if (selectionKind() === "file") return [];
         const folders = context.raw.folders.length ? context.raw.folders.join(", ") : "—";
         return `Dossier analysé : ${folders}`;
       }
@@ -212,10 +283,10 @@
     const lastDay = latestDate().slice(0, 10);
     const series = selectedProject === "all"
       ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(data.daily) }]
-      : visibleProjects().map(project => ({
+      : (selectedFile() ? [selectedFile()] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
-          rows: data.daily.filter(row => row.projet === project.id)
+          rows: productionRows("day").filter(row => row.projet === project.id)
         }));
     const datasets = series.map(item => {
       const allRows = item.rows.sort((a, b) => a.periode.localeCompare(b.periode));
@@ -255,19 +326,199 @@
     return new Chart(canvas, { type: "bar", data: { labels: weekdayLabels, datasets }, options });
   }
 
+  function fileActivityGrid(svg) {
+    const rows = data.file_activity
+      .filter(row => row.fichier === selectionId())
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const buckets = new Map();
+    for (const row of rows) {
+      const day = row.timestamp.slice(0, 10);
+      const hour = Number(row.timestamp.slice(11, 13));
+      const minute = Number(row.timestamp.slice(14, 16));
+      const slot = Math.floor((hour * 60 + minute) / activityCellMinutes);
+      const key = `${day}:${slot}`;
+      const bucket = buckets.get(key) || { day, slot, chars: 0, commits: 0 };
+      bucket.chars += Number(row.signes_reels) || 0;
+      bucket.commits += 1;
+      buckets.set(key, bucket);
+    }
+    const days = [];
+    if (rows.length) {
+      const cursor = new Date(`${rows[0].timestamp.slice(0, 10)}T12:00:00Z`);
+      const end = new Date(`${rows.at(-1).timestamp.slice(0, 10)}T12:00:00Z`);
+      while (cursor <= end) {
+        days.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+    const maximum = Math.max(1, ...[...buckets.values()].map(bucket => bucket.chars));
+    const namespace = "http://www.w3.org/2000/svg";
+    const layout = {
+      60: { columns: 4, rows: 6 },
+      30: { columns: 6, rows: 8 },
+      15: { columns: 8, rows: 12 }
+    }[activityCellMinutes];
+    const columnsPerDay = layout.columns;
+    const rowsPerColumn = layout.rows;
+    const slotsPerDay = columnsPerDay * rowsPerColumn;
+    const dayWidth = 88;
+    const cellWidth = dayWidth / columnsPerDay;
+    const cellHeight = cellWidth;
+    const gridHeight = rowsPerColumn * cellHeight;
+    const width = Math.max(1, days.length * dayWidth);
+    const height = gridHeight + 26;
+    const stage = document.querySelector("#file-activity-stage");
+    stage.style.width = `${width}px`;
+    stage.style.height = "";
+    svg.replaceChildren();
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    const detail = document.querySelector("#file-activity-detail");
+    detail.hidden = true;
+    detail.textContent = "";
+
+    days.forEach((day, dayIndex) => {
+      for (let slot = 0; slot < slotsPerDay; slot += 1) {
+        const bucket = buckets.get(`${day}:${slot}`);
+        const chars = bucket?.chars || 0;
+        const rectangle = document.createElementNS(namespace, "rect");
+        rectangle.setAttribute("x", String(dayIndex * dayWidth + Math.floor(slot / rowsPerColumn) * cellWidth));
+        rectangle.setAttribute("y", String((slot % rowsPerColumn) * cellHeight));
+        rectangle.setAttribute("width", String(cellWidth));
+        rectangle.setAttribute("height", String(cellHeight));
+        rectangle.setAttribute("fill", chars ? `rgb(26 115 232 / ${0.22 + 0.78 * Math.sqrt(chars / maximum)})` : "#fff");
+        rectangle.setAttribute("stroke", "#dadce0");
+        rectangle.setAttribute("class", "activity-cell");
+        rectangle.setAttribute("tabindex", "0");
+        const tooltip = document.createElementNS(namespace, "title");
+        const date = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+        const start = slot * activityCellMinutes;
+        const end = start + activityCellMinutes - 1;
+        const time = value => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+        const details = `${date}, ${time(start)}–${time(end)} : ${formatter.format(chars)} signes, ${formatter.format(bucket?.commits || 0)} commit${bucket?.commits > 1 ? "s" : ""}`;
+        rectangle.setAttribute("aria-label", details);
+        tooltip.textContent = details;
+        rectangle.append(tooltip);
+        rectangle.addEventListener("click", () => {
+          svg.querySelectorAll(".activity-cell.is-selected").forEach(cell => cell.classList.remove("is-selected"));
+          rectangle.classList.add("is-selected");
+          detail.textContent = details;
+          detail.hidden = false;
+        });
+        rectangle.addEventListener("keydown", event => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          rectangle.dispatchEvent(new MouseEvent("click"));
+        });
+        svg.append(rectangle);
+      }
+      const label = document.createElementNS(namespace, "text");
+      label.setAttribute("x", String(dayIndex * dayWidth + dayWidth / 2));
+      label.setAttribute("y", String(gridHeight + 18));
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("fill", "#5f6368");
+      label.setAttribute("font-size", "10");
+      label.textContent = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+      svg.append(label);
+    });
+    const outline = document.createElementNS(namespace, "rect");
+    outline.setAttribute("x", "1");
+    outline.setAttribute("y", "1");
+    outline.setAttribute("width", String(Math.max(0, width - 2)));
+    outline.setAttribute("height", String(Math.max(0, gridHeight - 2)));
+    outline.setAttribute("fill", "none");
+    outline.setAttribute("stroke", "#9aa0a6");
+    outline.setAttribute("stroke-width", "2");
+    outline.setAttribute("pointer-events", "none");
+    svg.append(outline);
+    for (let day = 1; day < days.length; day += 1) {
+      const separator = document.createElementNS(namespace, "line");
+      separator.setAttribute("x1", String(day * dayWidth));
+      separator.setAttribute("x2", String(day * dayWidth));
+      separator.setAttribute("y1", "0");
+      separator.setAttribute("y2", String(gridHeight));
+      separator.setAttribute("stroke", "#9aa0a6");
+      separator.setAttribute("stroke-width", "2");
+      separator.setAttribute("pointer-events", "none");
+      svg.append(separator);
+    }
+  }
+
   function filteredDaily() {
-    return data.daily.filter(row => selectedProject === "all" || row.projet === selectedProject);
+    return productionRows("day").filter(row => selectedProject === "all" || row.projet === selectionId());
+  }
+
+  function writingEstimate() {
+    const rows = data.file_activity
+      .filter(row => row.fichier === selectionId())
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    if (rows.length < 2) return null;
+    const gaps = rows.slice(1).map((row, index) => (
+      new Date(row.timestamp) - new Date(rows[index].timestamp)
+    ) / 60000).filter(value => value > 0);
+    if (!gaps.length) return null;
+    const ordered = gaps.slice().sort((a, b) => a - b);
+    const middle = Math.floor(ordered.length / 2);
+    const cadence = ordered.length % 2
+      ? ordered[middle]
+      : (ordered[middle - 1] + ordered[middle]) / 2;
+    const sessionLimit = cadence * 4;
+    const minutes = gaps.reduce(
+      (total, gap) => total + (gap <= sessionLimit ? gap : cadence),
+      cadence
+    );
+    const characters = rows.reduce((total, row) => total + (Number(row.signes_reels) || 0), 0);
+    return { minutes, speed: minutes > 0 ? Math.round(characters * 60 / minutes) : null };
+  }
+
+  function durationLabel(minutes) {
+    const rounded = Math.round(minutes);
+    if (rounded < 60) return `${rounded} min`;
+    const hours = Math.floor(rounded / 60);
+    const remainder = rounded % 60;
+    return remainder ? `${hours} h ${String(remainder).padStart(2, "0")}` : `${hours} h`;
   }
 
   function renderCards(rows) {
     document.querySelector("#total-chars").textContent = formatter.format(rows.reduce((sum, row) => sum + row.signes_reels, 0));
-    document.querySelector("#project-count").textContent = formatter.format(visibleProjects().length);
+    const file = selectedFile();
+    const finalSize = file
+      ? Number(file.taille_actuelle) || 0
+      : visibleProjects().reduce((total, project) => total + (Number(project.taille_actuelle) || 0), 0);
+    document.querySelector("#final-size").textContent = formatter.format(finalSize);
+    const estimate = file ? writingEstimate() : null;
+    document.querySelector("#writing-time-stat").hidden = !file;
+    document.querySelector("#writing-speed-stat").hidden = !file;
+    document.querySelector("#writing-time").textContent = estimate ? durationLabel(estimate.minutes) : "—";
+    document.querySelector("#writing-speed").textContent = estimate?.speed ? formatter.format(estimate.speed) : "—";
   }
 
   function savePreferences() {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, productionGranularity, sizeGranularity, zooms }));
+      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, productionGranularity, sizeGranularity, activityCellMinutes, zooms }));
     } catch (_) { /* Le dashboard reste utilisable si le stockage est désactivé. */ }
+  }
+
+  function updateActivityResolutionControls() {
+    document.querySelector("#activity-resolution").textContent = activityCellMinutes === 60 ? "1 h" : `${activityCellMinutes} min`;
+    const current = activityResolutions.indexOf(activityCellMinutes);
+    document.querySelectorAll("[data-activity-resolution]").forEach(button => {
+      button.disabled = button.dataset.activityResolution === "out"
+        ? current === 0
+        : current === activityResolutions.length - 1;
+    });
+  }
+
+  function updateSelectionUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("project");
+    url.searchParams.delete("file");
+    if (selectionKind() === "project") url.searchParams.set("project", selectionId());
+    if (selectionKind() === "file") url.searchParams.set("file", selectionId());
+    window.history.replaceState(null, "", url);
+    document.title = selectedProject === "all" ? "Writing Log" : `${title(selectedProject)} — Writing Log`;
   }
 
   function applyChartZoom(name, keepCenter = false) {
@@ -284,6 +535,7 @@
     });
     requestAnimationFrame(() => {
       charts[name]?.resize();
+      charts[name]?.update("none");
       if (keepCenter) {
         viewport.scrollLeft = Math.max(0, center * viewport.scrollWidth - viewport.clientWidth / 2);
       }
@@ -304,6 +556,18 @@
     document.querySelectorAll("[data-chart-zoom]").forEach(button => {
       button.addEventListener("click", () => {
         changeChartZoom(button.dataset.chartZoom, button.dataset.direction);
+      });
+    });
+    document.querySelectorAll("[data-activity-resolution]").forEach(button => {
+      button.addEventListener("click", () => {
+        const current = activityResolutions.indexOf(activityCellMinutes);
+        const offset = button.dataset.activityResolution === "in" ? 1 : -1;
+        const next = Math.max(0, Math.min(activityResolutions.length - 1, current + offset));
+        if (next === current) return;
+        activityCellMinutes = activityResolutions[next];
+        savePreferences();
+        updateActivityResolutionControls();
+        render();
       });
     });
   }
@@ -362,7 +626,8 @@
         const position = scale.getPixelForTick(index);
         const label = Array.isArray(tick.label) ? tick.label.join(" ") : tick.label;
         if (scale.axis === "x") {
-          parts.push(`<line x1="${position}" y1="${area.top}" x2="${position}" y2="${area.bottom}" stroke="#dadce0" stroke-dasharray="4 4"/>`);
+          const dayBoundary = new Date(tick.value).getHours() === 0;
+          parts.push(`<line x1="${position}" y1="${area.top}" x2="${position}" y2="${area.bottom}" stroke="${dayBoundary ? "#202124" : "#dadce0"}" stroke-width="${dayBoundary ? 2 : 1}"${dayBoundary ? "" : ' stroke-dasharray="4 4"'}/>`);
           parts.push(`<text x="${position}" y="${Math.min(height - 4, scale.bottom - 3)}" text-anchor="middle">${escapeXml(label ?? "")}</text>`);
         } else {
           if (scale.position !== "right") parts.push(`<line x1="${area.left}" y1="${position}" x2="${area.right}" y2="${position}" stroke="#e8eaed"/>`);
@@ -398,6 +663,12 @@
           });
         }
       }
+      if (meta.type === "scatter") {
+        meta.data.forEach(point => {
+          const radius = Number(point.options.radius) || 0;
+          parts.push(`<rect x="${point.x - radius}" y="${point.y - radius}" width="${radius * 2}" height="${radius * 2}" fill="${escapeXml(svgColor(point.options.backgroundColor))}"/>`);
+        });
+      }
     });
 
     const legend = chart.legend;
@@ -432,11 +703,44 @@
     downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), `${filename}.svg`);
   }
 
+  function exportSvg(svg, format) {
+    const heading = svg.closest(".panel")?.querySelector("h2")?.textContent || "graphique";
+    const project = selectedProject === "all" ? "tous-les-projets" : title(selectedProject);
+    const filename = `${safeFilename(project)}-${safeFilename(heading)}`;
+    const source = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    if (format === "svg") {
+      downloadBlob(blob, `${filename}.svg`);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      const scale = 2;
+      const width = Number(svg.getAttribute("width"));
+      const height = Number(svg.getAttribute("height"));
+      const canvas = document.createElement("canvas");
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const context = canvas.getContext("2d");
+      context.scale(scale, scale);
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = `${filename}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  }
+
   function installDownloadButtons() {
     document.querySelectorAll(".panel").forEach(panel => {
-      const canvas = panel.querySelector("canvas");
+      const visual = panel.querySelector("canvas, svg");
       const actions = panel.querySelector(".chart-actions");
-      if (!canvas) return;
+      if (!visual) return;
       if (!actions) return;
       const button = actions.querySelector(".chart-download") || document.createElement("button");
       if (button.dataset.downloadReady === "true") return;
@@ -454,7 +758,9 @@
         choice.type = "button";
         choice.textContent = format;
         choice.addEventListener("click", () => {
-          exportChart(canvas, format.toLowerCase());
+          const currentVisual = panel.querySelector("canvas, svg");
+          if (currentVisual instanceof SVGElement) exportSvg(currentVisual, format.toLowerCase());
+          else exportChart(currentVisual, format.toLowerCase());
           menu.hidden = true;
           button.setAttribute("aria-expanded", "false");
         });
@@ -485,17 +791,28 @@
 
   function sizeBucket(date, granularity) {
     const day = date.slice(0, 10);
-    return granularity === "year"
-      ? day.slice(0, 4)
-      : granularity === "month"
-        ? day.slice(0, 7)
-        : granularity === "week" ? isoWeek(day) : day;
+    return granularity === "minute"
+      ? date.slice(0, 16)
+      : granularity === "hour"
+        ? date.slice(0, 13)
+        : granularity === "year"
+          ? day.slice(0, 4)
+          : granularity === "month"
+            ? day.slice(0, 7)
+            : granularity === "week" ? isoWeek(day) : day;
   }
 
   function sizeRows(granularity) {
     const result = [];
-    for (const project of visibleProjects()) {
-      const rows = data.size_evolution.filter(row => row.projet === project.id).sort((a, b) => a.date.localeCompare(b.date));
+    const file = selectedFile();
+    const entities = file ? [file] : visibleProjects();
+    const source = file
+      ? data.file_size_evolution
+          .filter(row => !row.estime && row.modifie)
+          .map(row => ({ ...row, projet: row.fichier }))
+      : data.size_evolution;
+    for (const project of entities) {
+      const rows = source.filter(row => row.projet === project.id).sort((a, b) => a.date.localeCompare(b.date));
       const buckets = new Map();
       for (const row of rows) {
         const bucket = sizeBucket(row.date, granularity);
@@ -549,38 +866,68 @@
 
   function render() {
     Object.values(charts).forEach(chart => chart.destroy());
+    const preciseProduction = selectionKind() === "file";
+    document.querySelectorAll("[data-file-only]").forEach(option => {
+      option.disabled = !preciseProduction;
+      option.hidden = !preciseProduction;
+    });
+    if (!preciseProduction && ["minute", "hour"].includes(productionGranularity)) {
+      productionGranularity = "day";
+      document.querySelector("#production-granularity").value = productionGranularity;
+      savePreferences();
+    }
+    if (!preciseProduction && ["minute", "hour"].includes(sizeGranularity)) {
+      sizeGranularity = "day";
+      document.querySelector("#size-granularity").value = sizeGranularity;
+      savePreferences();
+    }
     renderCards(filteredDaily());
     const selectedTitle = document.querySelector("#selected-project-title");
     selectedTitle.hidden = selectedProject === "all";
     selectedTitle.textContent = selectedProject === "all" ? "" : title(selectedProject);
-    const productionData = productionGranularity === "week" ? data.weekly : productionGranularity === "month" ? data.monthly : data.daily;
+    const activityPanel = document.querySelector("#file-activity-panel");
+    activityPanel.hidden = selectionKind() !== "file";
+    if (!activityPanel.hidden) {
+      updateActivityResolutionControls();
+      fileActivityGrid(document.querySelector("#file-activity-chart"));
+    }
+    const productionData = productionRows(productionGranularity);
     charts.daily = productionChart(document.querySelector("#daily-chart"), productionData, productionGranularity);
     charts.weekday = weekdayChart(document.querySelector("#weekday-chart"));
     const projectSizes = sizeRows(sizeGranularity);
     const sizeSeries = selectedProject === "all"
       ? [{ id: "__all__", title: "Tous les projets", rows: combinedSizeRows(projectSizes, sizeGranularity) }]
-      : visibleProjects().map(project => ({
+      : (selectedFile() ? [selectedFile()] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
           rows: projectSizes.filter(row => row.projet === project.id)
         }));
-    const sizeTemporal = temporalAxis(sizeSeries.flatMap(item => item.rows), "date");
+    const sizeTemporal = temporalAxis(sizeSeries.flatMap(item => item.rows), "date", sizeGranularity, "size");
     const sizeDatasets = sizeSeries.map(item => {
       return {
         label: item.title,
-        data: item.rows.map(row => ({
-          x: periodTimestamp(row.date),
-          y: row.taille_signes,
-          rawSize: row.taille_brute ?? row.taille_signes,
-          timestamp: row.date,
-          commit: row.commit || "",
-          sourceCommit: row.source_commit || "",
-          folder: row.dossier || "",
-          estimated: Boolean(row.estime),
-          touched: Boolean(row.modifie),
-          aggregate: Boolean(row.aggregate),
-          projectCount: Number(row.project_count) || 1
-        })),
+        data: item.rows.map((row, index) => {
+          const previous = item.rows[index - 1];
+          const delta = previous ? Number(row.taille_signes) - Number(previous.taille_signes) : null;
+          const elapsedHours = previous
+            ? (periodTimestamp(row.date) - periodTimestamp(previous.date)) / 3600000
+            : 0;
+          return {
+            x: periodTimestamp(row.date),
+            y: row.taille_signes,
+            delta,
+            speed: delta !== null && elapsedHours > 0 ? Math.round(delta / elapsedHours) : null,
+            rawSize: row.taille_brute ?? row.taille_signes,
+            timestamp: row.date,
+            commit: row.commit || "",
+            sourceCommit: row.source_commit || "",
+            folder: row.dossier || "",
+            estimated: Boolean(row.estime),
+            touched: Boolean(row.modifie),
+            aggregate: Boolean(row.aggregate),
+            projectCount: Number(row.project_count) || 1
+          };
+        }),
         borderColor: color(item.id),
         pointRadius: context => context.raw?.touched ? 1.75 : 0.5,
         pointHoverRadius: 5,
@@ -597,7 +944,12 @@
         dateStyle: "long", timeStyle: "medium"
       }).format(new Date(items[0].raw.timestamp)),
       label: context => `Taille : ${formatter.format(context.raw.y)} signes`,
-      afterLabel: context => context.raw.aggregate
+      afterLabel: context => selectionKind() === "file"
+        ? [
+            `Signes : ${context.raw.delta === null ? "—" : context.raw.delta > 0 ? `+ ${formatter.format(context.raw.delta)}` : context.raw.delta < 0 ? `− ${formatter.format(Math.abs(context.raw.delta))}` : "0"}`,
+            `Vitesse : ${context.raw.speed === null ? "—" : `${context.raw.speed > 0 ? "+ " : context.raw.speed < 0 ? "− " : ""}${formatter.format(Math.abs(context.raw.speed))} signes/heure`}`
+          ]
+        : context.raw.aggregate
         ? [
             `Cumul de ${context.raw.projectCount} projets`,
             `Dossiers analysés : ${context.raw.folder || "—"}`
@@ -605,12 +957,12 @@
         : context.raw.estimated
         ? [
             `Estimation quotidienne vers le commit : ${context.raw.sourceCommit.slice(0, 12)}`,
-            `Dossier analysé : ${context.raw.folder || "—"}`
+            `${selectionKind() === "file" ? "Fichier" : "Dossier"} analysé : ${context.raw.folder || "—"}`
           ]
         : context.raw.commit ? [
             `Commit : ${context.raw.commit.slice(0, 12)}`,
-            `Dossier analysé : ${context.raw.folder || "—"}`,
-            context.raw.touched ? "Projet modifié" : "Taille inchangée",
+            `${selectionKind() === "file" ? "Fichier" : "Dossier"} analysé : ${context.raw.folder || "—"}`,
+            context.raw.touched ? `${selectionKind() === "file" ? "Fichier" : "Projet"} modifié` : "Taille inchangée",
             ...(context.raw.rawSize !== context.raw.y
               ? [`Mesure brute : ${formatter.format(context.raw.rawSize)} signes`]
               : [])
@@ -634,21 +986,36 @@
       }));
       data = Object.fromEntries(files.map((name, index) => [name, values[index]]));
       data.projects.forEach(project => color(project.id));
+      data.files.forEach(file => color(file.id));
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
-        if (saved?.project === "all" || data.projects.some(project => project.id === saved?.project)) selectedProject = saved.project;
-        if (["day", "week", "month"].includes(saved?.productionGranularity)) productionGranularity = saved.productionGranularity;
-        if (["day", "week", "month", "year"].includes(saved?.sizeGranularity)) sizeGranularity = saved.sizeGranularity;
+        if (saved?.project === "all" || data.projects.some(project => `project:${project.id}` === saved?.project) || data.files.some(file => `file:${file.id}` === saved?.project)) selectedProject = saved.project;
+        else if (data.projects.some(project => project.id === saved?.project)) selectedProject = `project:${saved.project}`;
+        if (["minute", "hour", "day", "week", "month"].includes(saved?.productionGranularity)) productionGranularity = saved.productionGranularity;
+        if (["minute", "hour", "day", "week", "month", "year"].includes(saved?.sizeGranularity)) sizeGranularity = saved.sizeGranularity;
+        if (activityResolutions.includes(saved?.activityCellMinutes)) activityCellMinutes = saved.activityCellMinutes;
         if (saved?.zooms) {
           for (const key of Object.keys(zooms)) {
             if (zoomLevels.includes(saved.zooms[key])) zooms[key] = saved.zooms[key];
           }
         }
       } catch (_) { /* Préférences absentes ou anciennes : conserver les valeurs par défaut. */ }
+      const query = new URLSearchParams(window.location.search);
+      if (query.has("project") && data.projects.some(project => project.id === query.get("project"))) selectedProject = `project:${query.get("project")}`;
+      if (query.has("file") && data.files.some(file => file.id === query.get("file"))) selectedProject = `file:${query.get("file")}`;
       const projectFilter = document.querySelector("#project-filter");
-      data.projects.forEach(project => projectFilter.add(new Option(project.title, project.id)));
+      const projectsGroup = document.createElement("optgroup");
+      projectsGroup.label = "Projets";
+      data.projects.forEach(project => projectsGroup.append(new Option(project.title, `project:${project.id}`)));
+      projectFilter.append(projectsGroup);
+      if (data.files.length) {
+        const filesGroup = document.createElement("optgroup");
+        filesGroup.label = "Fichiers";
+        data.files.forEach(file => filesGroup.append(new Option(file.title, `file:${file.id}`)));
+        projectFilter.append(filesGroup);
+      }
       projectFilter.value = selectedProject;
-      projectFilter.addEventListener("change", event => { selectedProject = event.target.value; savePreferences(); render(); });
+      projectFilter.addEventListener("change", event => { selectedProject = event.target.value; updateSelectionUrl(); savePreferences(); render(); });
       const granularity = document.querySelector("#production-granularity");
       granularity.value = productionGranularity;
       granularity.addEventListener("change", event => { productionGranularity = event.target.value; savePreferences(); render(); });
@@ -656,6 +1023,7 @@
       sizeGranularitySelect.value = sizeGranularity;
       sizeGranularitySelect.addEventListener("change", event => { sizeGranularity = event.target.value; savePreferences(); render(); });
       document.querySelector("#last-update").textContent = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" }).format(new Date(data.overview.derniere_mise_a_jour));
+      updateSelectionUrl();
       render();
       installZoomButtons();
       installDownloadButtons();

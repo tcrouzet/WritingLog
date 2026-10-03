@@ -288,7 +288,7 @@
   {
     "periode": "2025-08",
     "projet": "Isa",
-    "signes_reels": 149327,
+    "signes_reels": 22152,
     "signes_supprimes": 30295,
     "dossiers": [
       "Zone/manuscrit"
@@ -315,7 +315,7 @@
   {
     "periode": "2025-09",
     "projet": "Isa",
-    "signes_reels": 58733,
+    "signes_reels": 4015,
     "signes_supprimes": 15020,
     "dossiers": [
       "Zone/manuscrit"
@@ -482,7 +482,7 @@
     "periode": "2026-05",
     "projet": "Isa",
     "signes_reels": 84101,
-    "signes_supprimes": 12977,
+    "signes_supprimes": 12913,
     "dossiers": [
       "Isa",
       "Isa/manuscrit"
@@ -492,7 +492,7 @@
     "periode": "2026-05",
     "projet": "tcrouzet",
     "signes_reels": 83411,
-    "signes_supprimes": 13100,
+    "signes_supprimes": 12791,
     "dossiers": [
       "tcrouzet"
     ]
@@ -511,7 +511,7 @@
     "periode": "2026-06",
     "projet": "tcrouzet",
     "signes_reels": 40869,
-    "signes_supprimes": 4714,
+    "signes_supprimes": 4709,
     "dossiers": [
       "tcrouzet"
     ]
@@ -530,7 +530,7 @@
     "periode": "2026-07",
     "projet": "tcrouzet",
     "signes_reels": 56326,
-    "signes_supprimes": 3459,
+    "signes_supprimes": 3382,
     "dossiers": [
       "tcrouzet"
     ]
@@ -548,7 +548,7 @@
     "periode": "2026-08",
     "projet": "tcrouzet",
     "signes_reels": 130655,
-    "signes_supprimes": 5598,
+    "signes_supprimes": 5406,
     "dossiers": [
       "tcrouzet"
     ]
@@ -556,8 +556,8 @@
   {
     "periode": "2026-09",
     "projet": "Isa",
-    "signes_reels": 80990,
-    "signes_supprimes": 27642,
+    "signes_reels": 162262,
+    "signes_supprimes": 76952,
     "dossiers": [
       "Isa",
       "Isa/manuscrit"
@@ -566,8 +566,17 @@
   {
     "periode": "2026-09",
     "projet": "tcrouzet",
-    "signes_reels": 33951,
-    "signes_supprimes": 8585,
+    "signes_reels": 63808,
+    "signes_supprimes": 16426,
+    "dossiers": [
+      "tcrouzet"
+    ]
+  },
+  {
+    "periode": "2026-10",
+    "projet": "tcrouzet",
+    "signes_reels": 34717,
+    "signes_supprimes": 10879,
     "dossiers": [
       "tcrouzet"
     ]

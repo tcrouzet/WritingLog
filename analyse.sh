@@ -5,13 +5,13 @@ PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MODE=${1:-incremental}
 
 case "$MODE" in
-  full|incremental)
+  full|incremental|files)
     if [ "$#" -gt 0 ]; then
       shift
     fi
     ;;
   *)
-    echo "Usage : ./analyse.sh [full|incremental] [options]" >&2
+    echo "Usage : ./analyse.sh [full|incremental|files] [options]" >&2
     exit 2
     ;;
 esac

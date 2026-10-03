@@ -1,0 +1,772 @@
+[
+  {
+    "date": "2026-09-25T15:47:06+02:00",
+    "commit": "5c7402340ad1f0b22e9dddd83e164380d235b47b",
+    "taille_signes": 262,
+    "taille_brute": 262,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-09-25T16:02:11+02:00",
+    "commit": "e41942b3bb9d9fa1aea98cf492bba65ca4b33d27",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T06:39:58+02:00",
+    "commit": "3d7b9c676266ec0457de24b263cbcc6e2fd6be93",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T07:03:22+02:00",
+    "commit": "36563769ba8857be69ba1b3e4ece0186a0dbeec1",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T07:18:27+02:00",
+    "commit": "9404ef61d36327765f46f3d5b03aa37822f7e0bf",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T09:18:04+02:00",
+    "commit": "46d83fe743800252636f0ba660303a26b7157b1f",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T10:03:16+02:00",
+    "commit": "228cff6be1887bcabc3b8fa65199ac351a307751",
+    "taille_signes": 445,
+    "taille_brute": 445,
+    "dossier": "tcrouzet/2026/09/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T10:18:20+02:00",
+    "commit": "fde58ba7c445b8a4533106f8118466ac6512f186",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T10:33:24+02:00",
+    "commit": "95d54ef4eccbd71f54af90e986ed351834dcc16b",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T10:48:28+02:00",
+    "commit": "42d6704dc41d7fa9f79950b32c3a8d5664ac0bda",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T11:03:31+02:00",
+    "commit": "455bc65bce1594e3585abfbe93dc80c2dee19c0a",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T11:18:36+02:00",
+    "commit": "c8605ca9a3004628b67351b94e03588e4dab21f2",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T11:33:42+02:00",
+    "commit": "3e5472cc77aee23c84701e61bc747d845ea9990e",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T11:48:47+02:00",
+    "commit": "490f25e2f000549129a87e3d963b38c88992dbd2",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T12:03:52+02:00",
+    "commit": "9b56b3ea3a8dad6a19d45b802942cdf9bb6eb27a",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T12:19:57+02:00",
+    "commit": "c8d8c6aff529754e70f22fdd893471db190e3ffd",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T12:35:00+02:00",
+    "commit": "3bb371367b44cd30377f4274c4a7d32eb347979a",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T12:50:05+02:00",
+    "commit": "8c8a357f7a29f62204385f212e382b91934662a8",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T13:05:10+02:00",
+    "commit": "515e8fe53280c1f525003f5bbab8b5d7b6370838",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T13:20:14+02:00",
+    "commit": "b8355faa1cc1dfe918e828349e31818a1a9c0bfb",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T13:35:20+02:00",
+    "commit": "66971738876443b3131caeea6f89f690f72be9b7",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T14:08:23+02:00",
+    "commit": "a92cdd6ac8fc1a8ff2285761613abfcd1501740f",
+    "taille_signes": 461,
+    "taille_brute": 461,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T14:23:29+02:00",
+    "commit": "4231ebb7fd6b6d497fb68e96a68772ba393dfee5",
+    "taille_signes": 899,
+    "taille_brute": 899,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T15:40:21+02:00",
+    "commit": "c9f41e59005e85feef5c2ba5f6bb700f2945bd0f",
+    "taille_signes": 899,
+    "taille_brute": 899,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T15:55:29+02:00",
+    "commit": "821c5f8fd122a9f90b0cb214be625cdede601c1d",
+    "taille_signes": 1002,
+    "taille_brute": 1002,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T16:25:41+02:00",
+    "commit": "282722b4478f0702a650b57d5db1d3580ceb9393",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T16:55:51+02:00",
+    "commit": "bd1993020eecc4bcefee294c481397695b5227e9",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T17:10:57+02:00",
+    "commit": "67c9db4dcc0b740ddf53f908292f63fa5288d6f0",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T17:26:02+02:00",
+    "commit": "74c00ee237b9e35af1ca7ce135ea97d6ccca9f16",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T18:31:40+02:00",
+    "commit": "c57ecf119a62bdb222374dae163bcee71dbc9c46",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T18:57:21+02:00",
+    "commit": "b51841dad510f7b4c81203bad99e7806037c85bb",
+    "taille_signes": 1003,
+    "taille_brute": 1003,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T19:29:09+02:00",
+    "commit": "3076d6d4804577c7718f34d8abf4b97052b12d2f",
+    "taille_signes": 2077,
+    "taille_brute": 2077,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T19:44:13+02:00",
+    "commit": "bdae72bcd5ca5105a6bc135dddc05c806ee150a5",
+    "taille_signes": 3041,
+    "taille_brute": 3041,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T19:59:18+02:00",
+    "commit": "20f6cca114c387ed304e477e4cb15cbc8609eb33",
+    "taille_signes": 4109,
+    "taille_brute": 4109,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T20:14:21+02:00",
+    "commit": "8dc8154aa35e439513011b2db890badc52788f4b",
+    "taille_signes": 5094,
+    "taille_brute": 5094,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-01T20:42:36+02:00",
+    "commit": "d3277a998e82b9a93ad60d66a83ea7c22b4b3525",
+    "taille_signes": 5854,
+    "taille_brute": 5854,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T05:43:29+02:00",
+    "commit": "755493b4f10da74e63d5b05c5acc3afdd613b31f",
+    "taille_signes": 6007,
+    "taille_brute": 6007,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T05:58:34+02:00",
+    "commit": "1ddad9fb13dbd6db7788ae39bf6d3637dc76ddee",
+    "taille_signes": 6132,
+    "taille_brute": 6132,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T06:13:39+02:00",
+    "commit": "473c718c860697db63383d8dee5d1f6c164281be",
+    "taille_signes": 6274,
+    "taille_brute": 6274,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T06:28:42+02:00",
+    "commit": "526a36c07602ef0a363fb35d3384d5b7825d8222",
+    "taille_signes": 7360,
+    "taille_brute": 7360,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T06:43:46+02:00",
+    "commit": "8f282d40dadced2166fd01fd3c09ebfe0c4f99cc",
+    "taille_signes": 8476,
+    "taille_brute": 8476,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T06:58:50+02:00",
+    "commit": "5f4e72f1bbd99fecca27dd35b2f36f9256f628dd",
+    "taille_signes": 8739,
+    "taille_brute": 8739,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T07:13:54+02:00",
+    "commit": "075bd570f9096e5ad3e43f4c7eedc360b0f306f1",
+    "taille_signes": 8174,
+    "taille_brute": 8174,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T07:28:58+02:00",
+    "commit": "c1e017e48599df852b8fe6d206524eb303368943",
+    "taille_signes": 8806,
+    "taille_brute": 8806,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T07:44:03+02:00",
+    "commit": "1577ba7aaac0d23c6b2ac92e21dacb8778a1eca2",
+    "taille_signes": 9341,
+    "taille_brute": 9341,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T08:14:25+02:00",
+    "commit": "eee08dd9f4bca8bad53b43275dc03b903d037674",
+    "taille_signes": 9314,
+    "taille_brute": 9314,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T08:29:29+02:00",
+    "commit": "1ff5b21f432a17aab67a610dc9d5b5c73b59b1be",
+    "taille_signes": 10875,
+    "taille_brute": 10875,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T08:44:33+02:00",
+    "commit": "6502bb13c3365f46caf4583a1d1d966f953c72c9",
+    "taille_signes": 11006,
+    "taille_brute": 11006,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T08:59:38+02:00",
+    "commit": "feeb5571ac59e6d976701895a9f0530cf53a5935",
+    "taille_signes": 11476,
+    "taille_brute": 11476,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T09:14:41+02:00",
+    "commit": "84d83f2d2a6ad59370608f71b4e8bb6349c61b9e",
+    "taille_signes": 11789,
+    "taille_brute": 11789,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T09:29:44+02:00",
+    "commit": "842d598a5daab589346dc4c78bb717b21f400488",
+    "taille_signes": 12083,
+    "taille_brute": 12083,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T09:44:48+02:00",
+    "commit": "195ed646d246fc7b64b74615633c8504d2a1ef71",
+    "taille_signes": 12130,
+    "taille_brute": 12130,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T09:59:54+02:00",
+    "commit": "4d59cc18ed261779ecc0161591749813cbbbde44",
+    "taille_signes": 12109,
+    "taille_brute": 12109,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T10:14:59+02:00",
+    "commit": "4be5b1d1ef38ff8e2be0f5b4e9b2bea445ec744a",
+    "taille_signes": 12525,
+    "taille_brute": 12525,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T10:31:33+02:00",
+    "commit": "964bec14571d833a632c71278b8918704c700f07",
+    "taille_signes": 12765,
+    "taille_brute": 12765,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T10:46:36+02:00",
+    "commit": "fb11479926ce139db71800c20a29f3a64912179b",
+    "taille_signes": 12806,
+    "taille_brute": 12806,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T11:01:40+02:00",
+    "commit": "c7347d76f6a90bf59249ac14bba2d2240b90c970",
+    "taille_signes": 12806,
+    "taille_brute": 12806,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T11:31:49+02:00",
+    "commit": "96d5bd84f6c213367aed68ebf9128b9d334a1301",
+    "taille_signes": 12852,
+    "taille_brute": 12852,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T12:19:09+02:00",
+    "commit": "06ab8156b7307d239e2f4bb28b3e470817822e72",
+    "taille_signes": 12848,
+    "taille_brute": 12848,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T12:49:14+02:00",
+    "commit": "b7b4c9304aad7d8298442427b3ac4a370008379d",
+    "taille_signes": 12923,
+    "taille_brute": 12923,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T13:04:17+02:00",
+    "commit": "46addefcac031866c600ded0ed2c0e718789cc24",
+    "taille_signes": 12720,
+    "taille_brute": 12720,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T13:19:22+02:00",
+    "commit": "e103414ac9d4dc964390065d7ed716f5283818e9",
+    "taille_signes": 12607,
+    "taille_brute": 12607,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T13:34:28+02:00",
+    "commit": "c56d241f52ba0405f4967220f8d4067b613ab923",
+    "taille_signes": 12856,
+    "taille_brute": 12856,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T13:49:34+02:00",
+    "commit": "6b9143c11d39046b6c6193ff7ab7024f9e3b41c7",
+    "taille_signes": 12816,
+    "taille_brute": 12816,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T14:37:52+02:00",
+    "commit": "96a3ea21c4a85e9e7e98734f4b9fe805db05f6d2",
+    "taille_signes": 13006,
+    "taille_brute": 13006,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T14:52:58+02:00",
+    "commit": "b4eb64531c3a743fdf3e9c13db9f058566daa85b",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": true,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T15:08:04+02:00",
+    "commit": "041f9d6742d680b18f17ec1e034a8189ed8404b9",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T15:41:47+02:00",
+    "commit": "a7e6dba83f2ea41b7f53295dad4647699bbd4ca3",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T16:55:04+02:00",
+    "commit": "da30f7a925e7351bc8864adad4c0269f77c755a8",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T17:10:08+02:00",
+    "commit": "875b1dd9245a99570e550efcc32eb27ef1128803",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T17:25:14+02:00",
+    "commit": "6ade4240ece5a6d5d3288adea84960901fd78ca3",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T17:40:20+02:00",
+    "commit": "5d49a4e463a1facb9dfede38066fa4fbf7cff875",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T19:42:58+02:00",
+    "commit": "1f8d676f04902fa253cc7062c83102661abb257c",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T20:15:10+02:00",
+    "commit": "052a484c1a6743e6ea399a2b8aa4b5ef1c5d82e5",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-02T21:43:14+02:00",
+    "commit": "4498708bf7bfae9bee192d85e0d669bdba82bc39",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-03T06:06:52+02:00",
+    "commit": "b5fe94341ba0c3a3c773398f355cf97c60eabbca",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  },
+  {
+    "date": "2026-10-03T06:21:57+02:00",
+    "commit": "12134e164d9d6436bf55eb78d54c1c3de37e2925",
+    "taille_signes": 12978,
+    "taille_brute": 12978,
+    "dossier": "tcrouzet/2026/10/hypocrisie-editoriale.md",
+    "modifie": false,
+    "estime": false,
+    "fichier": "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  }
+]

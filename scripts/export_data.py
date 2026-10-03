@@ -7,7 +7,7 @@ import argparse
 from collections import defaultdict
 from datetime import datetime, timedelta
 import json
-from pathlib import Path
+from pathlib import Path, PurePath
 import re
 import sqlite3
 import sys
@@ -224,6 +224,97 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
     ]
     sizes = interpolate_size_rows(raw_sizes)
 
+    tracked_file_metadata = state.get("tracked_file_metadata", {})
+    file_daily: dict[tuple[str, str], dict[str, Any]] = defaultdict(
+        lambda: {"signes_reels": 0, "chemins": set()}
+    )
+    file_events_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for event in state.get("tracked_file_events", []):
+        file_id = event["file"]
+        if file_id not in tracked_file_metadata:
+            continue
+        file_events_by_id[file_id].append(event)
+        days = production_days(event.get("interval_start"), event["timestamp"])
+        for day, chars in split_integer_over_days(int(event.get("real_chars", 0)), days):
+            values = file_daily[(day, file_id)]
+            values["signes_reels"] += chars
+            values["chemins"].update(event.get("paths", []))
+    file_daily_rows = [
+        {
+            "periode": period,
+            "fichier": file_id,
+            "signes_reels": int(values["signes_reels"]),
+            "chemins": sorted(values["chemins"]),
+        }
+        for (period, file_id), values in sorted(file_daily.items())
+        if int(values["signes_reels"]) > 0
+    ]
+
+    def rollup_files(kind: str) -> list[dict[str, Any]]:
+        rolled: dict[tuple[str, str], dict[str, Any]] = defaultdict(
+            lambda: {"signes_reels": 0, "chemins": set()}
+        )
+        for row in file_daily_rows:
+            day = datetime.fromisoformat(row["periode"])
+            if kind == "week":
+                iso = day.isocalendar()
+                period = f"{iso.year}-W{iso.week:02d}"
+            else:
+                period = f"{day.year:04d}-{day.month:02d}"
+            values = rolled[(period, row["fichier"])]
+            values["signes_reels"] += row["signes_reels"]
+            values["chemins"].update(row["chemins"])
+        return [
+            {
+                "periode": period,
+                "fichier": file_id,
+                "signes_reels": int(values["signes_reels"]),
+                "chemins": sorted(values["chemins"]),
+            }
+            for (period, file_id), values in sorted(rolled.items())
+        ]
+
+    tracked_files = []
+    for file_id, custom in tracked_file_metadata.items():
+        file_events = file_events_by_id.get(file_id, [])
+        tracked_files.append({
+            **{key: value for key, value in custom.items() if not key.startswith("_")},
+            "id": file_id,
+            "title": custom.get("title", PurePath(custom.get("file", file_id)).stem),
+            "signes_reels_total": sum(int(event.get("real_chars", 0)) for event in file_events),
+            "taille_actuelle": int(state.get("tracked_file_sizes", {}).get(file_id, 0)),
+            "date_creation": file_events[0]["timestamp"] if file_events else None,
+            "derniere_activite": file_events[-1]["timestamp"] if file_events else None,
+        })
+    file_size_rows = interpolate_size_rows([
+        {
+            "date": point["timestamp"],
+            "commit": point["commit"],
+            "projet": point["file"],
+            "taille_signes": int(point["size"]),
+            "taille_brute": int(point["size"]),
+            "dossier": point.get("path"),
+            "modifie": bool(point.get("touched", False)),
+            "estime": False,
+        }
+        for point in state.get("tracked_file_size_points", [])
+        if point["file"] in tracked_file_metadata
+    ])
+    for row in file_size_rows:
+        row["fichier"] = row.pop("projet")
+    file_activity = [
+        {
+            "timestamp": event["timestamp"],
+            "commit": event["commit"],
+            "fichier": event["file"],
+            "signes_reels": int(event.get("real_chars", 0)),
+            "signes_internes": int(event.get("internal_chars", 0)),
+            "chemins": event.get("paths", []),
+        }
+        for event in state.get("tracked_file_events", [])
+        if event["file"] in tracked_file_metadata
+    ]
+
     total_real = sum(project["signes_reels_total"] for project in projects)
     total_deleted = sum(project["signes_supprimes_total"] for project in projects)
     cutoff = datetime.now().astimezone().date() - timedelta(days=30)
@@ -260,6 +351,12 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
         "weekly": rollup("week"),
         "monthly": rollup("month"),
         "size_evolution": sizes,
+        "files": tracked_files,
+        "file_daily": file_daily_rows,
+        "file_weekly": rollup_files("week"),
+        "file_monthly": rollup_files("month"),
+        "file_size_evolution": file_size_rows,
+        "file_activity": file_activity,
         "duplications": duplications,
     }
 

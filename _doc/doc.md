@@ -12,9 +12,9 @@ https://tcrouzet.github.io/WritingLog/
 ./web
 
 cd /Users/thierrycrouzet/Documents/python/WritingLog/site
-python3 -m http.server 8001
+python3 -m http.server 8000
 
-http://localhost:8001
+http://localhost:8000
 
 
 
@@ -23,3 +23,9 @@ grep -A3 "Isa" site/data/size_evolution.json > extrait_isa.txt
 grep -B1 -A2 '"projet": "Isa"' site/data/daily.json > extrait_isa_daily.txt
 
 cd /Users/thierrycrouzet/Documents/ObsidianLocal/text/
+
+
+# Manuel
+
+./analyse.sh files
+./web.sh

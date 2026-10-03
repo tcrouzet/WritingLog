@@ -11,7 +11,7 @@ h1 { margin: 0; font-size: 20px; font-weight: 500; }
 select { min-width: 160px; padding: 9px 32px 9px 12px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: #fff; font: inherit; }
 select:focus { border-color: var(--blue); outline: 1px solid var(--blue); }
 main { width: min(1400px, 100%); margin: 0 auto; padding: 28px; }
-.overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
 .stat { min-width: 0; padding: 8px 24px 24px 0; }
 .stat + .stat { padding-left: 24px; border-left: 1px solid var(--line); }
 .stat span { display: block; color: var(--muted); font-size: 12px; }
@@ -35,6 +35,13 @@ main { width: min(1400px, 100%); margin: 0 auto; padding: 28px; }
 .chart-scroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-gutter: stable; }
 .canvas-wrap { position: relative; height: 300px; }
 .canvas-wrap.tall { height: 420px; }
+.activity { min-width: 320px; }
+.activity svg { display: block; width: auto; max-width: none; height: auto; }
+.activity-cell { cursor: pointer; }
+.activity-cell:focus, .activity-cell.is-selected { outline: none; stroke: var(--blue); stroke-width: 3px; }
+.activity-resolution { min-width: 3.5rem; color: var(--muted); font-size: 12px; text-align: right; }
+.activity-detail { display: block; min-height: 20px; margin-top: 8px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.activity-detail[hidden] { display: none; }
 .chart-download { appearance: none; flex: 0 0 auto; width: 2.2rem; height: 2.2rem; padding: .25rem; border: 1px solid #cfc8c0; border-radius: .3125rem; background: white url("assets/images/download-button.svg") center / 1.35rem no-repeat; color: transparent; cursor: pointer; }
 .chart-download:hover { border-color: #9aa0a6; background-color: #f8f9fa; }
 .chart-download:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

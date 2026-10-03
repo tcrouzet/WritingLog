@@ -201,6 +201,28 @@ class FingerprintIndex:
                 first.setdefault(fingerprint, (project, file_path, commit_hash))
         return known, first
 
+    def known_before_commit(
+        self, hashes: Iterable[str], commit_hash: str, target_file: str
+    ) -> set[str]:
+        """Retourne les fingerprints déjà vus avant ce commit ou ailleurs dans celui-ci."""
+        unique = list(dict.fromkeys(hashes))
+        known: set[str] = set()
+        for chunk in self._chunks(unique):
+            placeholders = ",".join("?" for _ in chunk)
+            known.update(
+                row[0]
+                for row in self.connection.execute(
+                    f"SELECT DISTINCT f.hash FROM fingerprints AS f "
+                    f"JOIN commits AS seen ON seen.commit_hash = f.commit_hash "
+                    f"JOIN commits AS current ON current.commit_hash = ? "
+                    f"WHERE f.hash IN ({placeholders}) AND "
+                    f"(seen.rowid < current.rowid OR "
+                    f"(seen.rowid = current.rowid AND f.file <> ?))",
+                    [commit_hash, *chunk, target_file],
+                )
+            )
+        return known
+
     def fingerprint_files(self, hashes: list[str]) -> dict[str, set[str]]:
         """Retourne tous les fichiers ayant porté chaque fingerprint."""
         result: dict[str, set[str]] = {}

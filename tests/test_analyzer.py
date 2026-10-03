@@ -18,7 +18,7 @@ ANALYZER = ROOT / "scripts" / "analyze_vault.py"
 DATA_EXPORTER = ROOT / "scripts" / "export_data.py"
 WEB_BUILDER = ROOT / "scripts" / "web.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from analyze_vault import character_changes, classification_blocks, load_state, project_file_settings
+from analyze_vault import character_changes, classification_blocks, load_state, project_file_settings, tracked_file_settings
 from export_data import aggregate, interpolate_size_rows
 from fingerprint_index import FingerprintIndex
 
@@ -99,6 +99,116 @@ output_dir: site
         })
         self.assertEqual(set(metadata), {"Alpha"})
         self.assertEqual(excluded, ["WIP", "Carnets"])
+
+    def test_files_section_is_reserved_and_normalized(self) -> None:
+        raw = {
+            "Alpha": {"folder": "Alpha/manuscrit"},
+            "Files": [
+                "Alpha/simple.md",
+                {
+                    "id": "essai",
+                    "title": "Mon essai",
+                    "file": "Alpha/final.md",
+                    "history_files": ["Alpha/brouillon.md"],
+                },
+            ],
+        }
+        metadata, _ = project_file_settings(raw)
+        files = tracked_file_settings(raw)
+
+        self.assertEqual(set(metadata), {"Alpha"})
+        self.assertEqual(files["Alpha/simple.md"]["title"], "simple")
+        self.assertEqual(files["essai"]["history_files"], ["Alpha/brouillon.md"])
+
+    def test_tracked_file_keeps_history_across_rename(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "Alpha:\n"
+            "  title: Premier projet\n"
+            "  folder: Alpha/manuscrit\n"
+            "Files:\n"
+            "  - id: essai\n"
+            "    title: Mon essai\n"
+            "    file: Alpha/manuscrit/final.md\n",
+            encoding="utf-8",
+        )
+        manuscript = self.vault / "Alpha" / "manuscrit"
+        manuscript.mkdir(parents=True)
+        old_file = manuscript / "brouillon.md"
+        first = self.text(800, seed=301)
+        addition = self.text(120, seed=302)
+        old_file.write_text(first, encoding="utf-8")
+        self.commit("start file", "2026-01-01T10:00:00+01:00")
+        old_file.write_text(first + addition, encoding="utf-8")
+        new_file = manuscript / "final.md"
+        old_file.rename(new_file)
+        self.commit("rename file", "2026-01-02T10:00:00+01:00")
+
+        self.analyze("full")
+
+        tracked = self.load("files.json")
+        self.assertEqual(len(tracked), 1)
+        self.assertEqual(tracked[0]["id"], "essai")
+        self.assertEqual(tracked[0]["taille_actuelle"], len(first + addition))
+        self.assertEqual(
+            sum(row["signes_reels"] for row in self.load("file_daily.json")),
+            len(first + addition),
+        )
+        sizes = self.load("file_size_evolution.json")
+        self.assertEqual(sizes[-1]["taille_signes"], len(first + addition))
+        self.assertEqual(sizes[-1]["dossier"], "Alpha/manuscrit/final.md")
+        activity = self.load("file_activity.json")
+        self.assertEqual(
+            [row["timestamp"] for row in activity],
+            ["2026-01-01T10:00:00+01:00", "2026-01-02T10:00:00+01:00"],
+        )
+
+        expected = {
+            name: self.load(name)
+            for name in (
+                "files.json",
+                "file_daily.json",
+                "file_weekly.json",
+                "file_monthly.json",
+                "file_size_evolution.json",
+                "file_activity.json",
+            )
+        }
+        state_before = self.load("state.json")
+        with sqlite3.connect(self.root / ".cache" / "fingerprints.sqlite3") as database:
+            fingerprint_count = database.execute(
+                "SELECT COUNT(*) FROM fingerprints"
+            ).fetchone()[0]
+
+        self.analyze("files")
+
+        self.assertEqual(
+            {name: self.load(name) for name in expected},
+            expected,
+        )
+        state_after = self.load("state.json")
+        self.assertEqual(state_after["events"], state_before["events"])
+        with sqlite3.connect(self.root / ".cache" / "fingerprints.sqlite3") as database:
+            self.assertEqual(
+                database.execute("SELECT COUNT(*) FROM fingerprints").fetchone()[0],
+                fingerprint_count,
+            )
+
+    def test_tracked_file_is_analyzed_inside_an_excluded_folder(self) -> None:
+        (self.root / "projet.yml").write_text(
+            "excluded_folders: [journal]\n"
+            "Files: [journal/essai.md]\n",
+            encoding="utf-8",
+        )
+        folder = self.vault / "journal"
+        folder.mkdir()
+        text = self.text(500, seed=303)
+        (folder / "essai.md").write_text(text, encoding="utf-8")
+        self.commit("tracked standalone file", "2026-01-01T10:00:00+01:00")
+
+        self.analyze("full")
+
+        self.assertEqual(self.load("projects.json"), [])
+        self.assertEqual(self.load("files.json")[0]["signes_reels_total"], len(text))
 
     def test_automatic_project_initial_snapshot_is_size_not_production(self) -> None:
         ongoing = self.vault / "Ongoing"

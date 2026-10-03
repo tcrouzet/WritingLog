@@ -56,7 +56,7 @@ Utilisation courante — synchroniser les nouveaux commits locaux puis lancer l�
 ./web.sh
 ```
 
-`./cache.sh` supprime et recrée le miroir Git local. `./cache.sh update` conserve le miroir existant et y ajoute les nouveaux commits. Il annonce explicitement s’il n’existe aucun ajout ou combien de commits ont été récupérés, affiche jusqu’aux dix derniers avec leur SHA, leur date et leur message, puis indique le changement de `HEAD`. `./analyse.sh full` purge la base d’analyse et rejoue systématiquement tout l’historique depuis le premier commit. `./analyse.sh` ne traite que les commits postérieurs au dernier commit enregistré. Ces deux commandes écrivent exclusivement dans SQLite. `./web.sh` ne lance ni analyse ni serveur : il exporte les JSON depuis SQLite puis génère les fichiers statiques de `site/`.
+`./cache.sh` supprime et recrée le miroir Git local. `./cache.sh update` conserve le miroir existant et y ajoute les nouveaux commits. Il annonce explicitement s’il n’existe aucun ajout ou combien de commits ont été récupérés, affiche jusqu’aux dix derniers avec leur SHA, leur date et leur message, puis indique le changement de `HEAD`. `./analyse.sh full` purge la base d’analyse et rejoue systématiquement tout l’historique depuis le premier commit. `./analyse.sh` ne traite que les commits postérieurs au dernier commit enregistré. `./analyse.sh files` reconstruit seulement les métriques des chemins déclarés dans `Files`. Ces commandes écrivent exclusivement dans SQLite. `./web.sh` ne lance ni analyse ni serveur : il exporte les JSON depuis SQLite puis génère les fichiers statiques de `site/`.
 
 ## Installation
 
@@ -93,6 +93,20 @@ mon-roman:
 ```
 
 `title` est affiché dans le dashboard. `folder` est le chemin complet du dossier actuellement suivi depuis la racine du vault. `history_folders` liste ses anciens chemins. Le mapping complet sert à la classification et à la filiation du texte. Pour la taille, une seule de ces racines représente le manuscrit actif à un instant donné. Une définition explicite prime sur `excluded_folders` : `folder: "Archives/Rush/manuscrit"` suit donc Rush sous Archives. Tous les autres champs sont transmis sans modification à `projects.json`.
+
+La section réservée `Files` suit un fichier indépendamment du projet qui le contient. Un chemin simple utilise le nom du fichier comme titre. La forme détaillée fixe un identifiant partageable et recense ses anciens noms :
+
+```yaml
+Files:
+  - "tcrouzet/2026/10/hypocrisie-editoriale.md"
+  - id: mon-essai
+    title: "Mon essai"
+    file: "essais/version-finale.md"
+    history_files:
+      - "brouillons/ancien-titre.md"
+```
+
+Sans `history_files`, l’analyse remonte automatiquement les renommages reconnus par Git depuis le chemin courant. Lorsque `history_files` est présent, il est autoritaire : seuls les chemins indiqués représentent ce fichier au fil de l’historique. Après une modification de `Files`, lancez `./analyse.sh files`, puis `./web.sh`.
 
 Les projets qui n’existent plus à la racine du vault — notamment ceux déplacés dans un dossier exclu comme `Archives` — sont recensés dans `projets_archives.yml`. Ils redeviennent visibles et suivis dès que leur bloc est copié dans `projet.yml`.
 
@@ -224,6 +238,12 @@ python scripts/analyze_vault.py incremental
 
 Il refuse de démarrer si l’état manque ou ne correspond plus à la configuration, afin de ne jamais déclencher silencieusement une reconstruction complète.
 
+Le mode fichier relit l’historique Git des seuls chemins configurés et conserve les événements, tailles et fingerprints des projets. Il réutilise les mêmes fonctions de diff, winnowing et classification que l’analyse générale ; l’index SQLite existant indique quels fingerprints étaient déjà connus au moment de chaque commit :
+
+```bash
+./analyse.sh files
+```
+
 Après une modification de la logique de classification, des exclusions, extensions, seuils ou réglages de session, reconstruisez les données. Une analyse incrémentale ne corrige jamais les événements historiques déjà produits :
 
 ```bash
@@ -261,11 +281,15 @@ Les deux opérations web sont elles-mêmes séparées :
 
 `export_data.py` lit SQLite, calcule les agrégats d’affichage et remplace `site/data/*.json`. `web.py` copie uniquement HTML, CSS, JavaScript et images depuis `web/` vers `site/`. `./web.sh` enchaîne ces deux commandes par commodité, sans relire Git, reclasser le texte ou démarrer un serveur. Chaque génération web inscrit un timestamp dans les URL du JavaScript, de la feuille de style et du favicon. À chaque chargement de page, le dashboard ajoute également une version unique aux URL des JSON et demande explicitement de ne pas utiliser le cache.
 
-Le filtre principal permet d’isoler un projet. Le graphique « Production » affiche toujours tout l’historique et regroupe les vues jour, semaine et mois dans un sélecteur unique. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin racine suivi. Le zoom et le défilement horizontal permettent d’examiner une portion de cette chronologie complète.
+Le filtre principal permet d’isoler un projet ou un fichier suivi. Le graphique « Production » affiche toujours tout l’historique et regroupe les vues jour, semaine et mois dans un sélecteur unique. Pour un fichier, le sélecteur ajoute les vues heure et minute, calculées directement depuis les timestamps des commits sans ventilation. Ses barres représentent exclusivement le texte nouveau dont les fingerprints n’étaient pas déjà connus : aucune suppression ni duplication n’y entre. Son infobulle indique le chemin suivi. Le zoom et le défilement horizontal permettent d’examiner une portion de cette chronologie complète. La sélection est inscrite dans l’URL sous la forme `?project=Isa` ou `?file=mon-essai` ; cette URL ouvre directement le tableau de bord correspondant.
+
+La sélection d’un fichier affiche aussi « Activité horaire ». Cette grille utilise directement l’heure de chaque commit, sans ventilation entre les commits. Chaque jour occupe quatre colonnes successives de six heures sur l’axe horizontal ; chaque case représente une heure. Les cases sans activité restent blanches, les séparations entre jours sont renforcées et l’intensité des autres cases représente les signes nouveaux de l’heure. L’infobulle donne le volume et le nombre de commits.
+
+Le temps d’écriture affiché pour un fichier est une estimation fondée sur sa cadence de commits. La médiane des intervalles entre ses commits définit une cadence. Un écart supérieur à 4 cadences ouvre une nouvelle session ; les intervalles plus courts sont additionnés et le premier commit de chaque session reçoit une cadence. Le ratio « Signes par heure » divise la production réelle par cette durée. Avec moins de 2 commits, les 2 valeurs restent absentes.
 
 L’histogramme placé en bas, « Production par jour de la semaine », additionne sur tout l’historique les signes réellement produits du lundi au dimanche pour le projet sélectionné. Son infobulle indique aussi la moyenne par occurrence de ce jour et le nombre de jours actifs, afin de distinguer volume cumulé et régularité.
 
-Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. Lorsque deux commits globaux sont séparés de plusieurs jours et que la taille change au second, l’export ajoute un point estimé pour chaque journée intermédiaire et répartit exactement la variation entière entre ces jours ; les instantanés Git d’origine restent identifiés séparément. Son axe vertical part de la plus petite valeur utile affichée au lieu d’être systématiquement forcé à zéro. Son sélecteur choisit uniquement la granularité — dernier état de chaque jour, semaine ISO, mois ou année — et ne coupe jamais la chronologie : tout l’historique reste affiché. Les JSON conservent toujours les points de chaque commit.
+Le graphique « Taille » est une série distincte, issue de `size_evolution.json`. Il représente la taille logique du manuscrit, y compris sous ses anciens chemins configurés. Il part de la taille physique et retranche les compilations, exports et doublons reconnus pendant toute leur période d’existence. Lorsque deux commits globaux sont séparés de plusieurs jours et que la taille change au second, l’export ajoute un point estimé pour chaque journée intermédiaire et répartit exactement la variation entière entre ces jours ; les instantanés Git d’origine restent identifiés séparément. Son axe vertical part de la plus petite valeur utile affichée au lieu d’être systématiquement forcé à zéro. Son sélecteur choisit uniquement la granularité — dernier état de chaque jour, semaine ISO, mois ou année — et ne coupe jamais la chronologie : tout l’historique reste affiché. Pour un fichier suivi, toutes les granularités utilisent uniquement les commits qui modifient ce fichier. L’infobulle donne sa taille, la variation signée depuis son commit précédent et cette variation ramenée à 1 heure. Les JSON conservent toujours les points de chaque commit.
 
 Les boutons `−` et `+` règlent indépendamment l’échelle horizontale de chaque graphique. Dès que le tracé devient plus large que la page, il se parcourt horizontalement ; le niveau de zoom est conservé dans `localStorage`. Les infobulles indiquent le dossier analysé, notamment pour contrôler les changements de racine historique.
 
@@ -287,6 +311,10 @@ Le dashboard utilise Chart.js depuis un CDN : les données restent dans `site/`,
 - `projects.json` : totaux d’écriture réelle, suppressions éditoriales, taille actuelle et métadonnées de chaque projet ;
 - `daily.json`, `weekly.json`, `monthly.json` : signes ajoutés, signes supprimés et dossiers racines par période et projet ;
 - `size_evolution.json` : tailles logique (`taille_signes`) et brute (`taille_brute`) du manuscrit à chaque commit global, avec timestamp, hash, dossier analysé et indicateur de modification du projet ;
+- `files.json` : métadonnées, production totale et taille actuelle des fichiers suivis ;
+- `file_daily.json`, `file_weekly.json`, `file_monthly.json` : production des fichiers suivis par période ;
+- `file_size_evolution.json` : taille et chemin de chaque fichier suivi à chaque commit global ;
+- `file_activity.json` : production exacte de chaque commit touchant un fichier suivi, avec timestamp et chemin ;
 - `duplications.json` : blocs classés comme déplacements/duplications, ratios et provenances d’origine ;
 
 `state.json` n’est plus généré : l’état interne reste exclusivement dans SQLite.

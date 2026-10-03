@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Tableau de bord local de l'activité d'écriture">
   <title>Writing Log</title>
-  <link rel="icon" href="assets/images/favicon.svg?v=20260917135419" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=20260917135419">
+  <link rel="icon" href="assets/images/favicon.svg?v=20261003084425" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=20261003084425">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-  <script src="dashboard.js?v=20260917135419" defer></script>
+  <script src="dashboard.js?v=20261003084425" defer></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">W</span><div><h1>Writing Log</h1><p id="selected-project-title" hidden></p></div></div>
     <div class="toolbar">
-      <label>Projet
+      <label>Suivi
         <select id="project-filter"><option value="all">Tous les projets</option></select>
       </label>
     </div>
@@ -24,18 +24,25 @@
     <p id="error" class="error" hidden></p>
     <section class="overview" aria-label="Vue d'ensemble">
       <article class="stat"><span>Signes produits</span><strong id="total-chars">—</strong></article>
-      <article class="stat"><span>Projets suivis</span><strong id="project-count">—</strong></article>
+      <article class="stat"><span>Signes au final</span><strong id="final-size">—</strong></article>
+      <article class="stat" id="writing-time-stat" hidden><span>Temps d’écriture estimé</span><strong id="writing-time">—</strong></article>
+      <article class="stat" id="writing-speed-stat" hidden><span>Signes par heure</span><strong id="writing-speed">—</strong></article>
     </section>
 
     <p class="updated">Données mises à jour <time id="last-update">—</time></p>
 
     <section class="chart-grid">
+      <article class="panel wide" id="file-activity-panel" hidden>
+        <header><div><h2>Activité horaire</h2></div><div class="chart-actions"><span class="activity-resolution" id="activity-resolution">1 h</span><span class="chart-zoom" role="group" aria-label="Précision de l’activité"><button type="button" data-activity-resolution="out" aria-label="Afficher moins de cases par jour" title="Afficher moins de cases par jour">−</button><button type="button" data-activity-resolution="in" aria-label="Afficher plus de cases par jour" title="Afficher plus de cases par jour">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <div class="chart-scroll"><div class="activity" id="file-activity-stage"><svg id="file-activity-chart" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Activité horaire"></svg></div></div>
+        <output class="activity-detail" id="file-activity-detail" aria-live="polite" hidden></output>
+      </article>
       <article class="panel wide">
-        <header><div><h2>Production</h2></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la production"><button type="button" data-chart-zoom="daily" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="daily" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <header><div><h2>Production</h2></div><div class="chart-actions"><select id="production-granularity" aria-label="Granularité de la production"><option value="minute" data-file-only>Minute</option><option value="hour" data-file-only>Heure</option><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la production"><button type="button" data-chart-zoom="daily" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="daily" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="chart-scroll" data-chart-scroll="daily"><div class="canvas-wrap" data-chart-stage="daily"><canvas id="daily-chart"></canvas></div></div>
       </article>
       <article class="panel wide">
-        <header><div><h2>Taille</h2></div><div class="chart-actions"><select id="size-granularity" aria-label="Granularité de la taille du manuscrit"><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option><option value="year">Année</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la taille"><button type="button" data-chart-zoom="size" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="size" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
+        <header><div><h2>Taille</h2></div><div class="chart-actions"><select id="size-granularity" aria-label="Granularité de la taille du manuscrit"><option value="minute" data-file-only>Minute</option><option value="hour" data-file-only>Heure</option><option value="day" selected>Jour</option><option value="week">Semaine</option><option value="month">Mois</option><option value="year">Année</option></select><span class="chart-zoom" role="group" aria-label="Échelle horizontale de la taille"><button type="button" data-chart-zoom="size" data-direction="out" aria-label="Réduire l’échelle horizontale" title="Réduire l’échelle horizontale">−</button><button type="button" data-chart-zoom="size" data-direction="in" aria-label="Agrandir l’échelle horizontale" title="Agrandir l’échelle horizontale">+</button></span><button type="button" class="chart-download" aria-label="Télécharger ce graphique" title="Télécharger ce graphique"></button></div></header>
         <div class="chart-scroll" data-chart-scroll="size"><div class="canvas-wrap tall" data-chart-stage="size"><canvas id="size-chart"></canvas></div></div>
       </article>
       <article class="panel wide">

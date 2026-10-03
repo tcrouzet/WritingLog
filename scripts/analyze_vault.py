@@ -118,9 +118,10 @@ def json_compatible(value: Any) -> Any:
 
 
 def project_file_settings(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str] | None]:
-    """Retire de projet.yml la section réservée aux dossiers exclus."""
+    """Retire de projet.yml les sections qui ne décrivent pas un projet."""
     metadata = dict(raw)
     excluded_folders = metadata.pop("excluded_folders", None)
+    metadata.pop("Files", None)
     if excluded_folders is not None and (
         not isinstance(excluded_folders, list)
         or not all(isinstance(folder, str) and folder.strip() for folder in excluded_folders)
@@ -132,6 +133,73 @@ def project_file_settings(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str
         if excluded_folders is not None
         else None,
     )
+
+
+def tracked_file_settings(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Normalise les fichiers suivis et leurs anciens chemins explicites."""
+    result: dict[str, dict[str, Any]] = {}
+    entries = raw.get("Files", [])
+    if not isinstance(entries, list):
+        raise ValueError("projet.yml: Files doit être une liste.")
+    for entry in entries:
+        if isinstance(entry, str):
+            fields: dict[str, Any] = {"file": entry}
+        elif isinstance(entry, dict):
+            fields = dict(entry)
+        else:
+            raise ValueError("projet.yml: chaque fichier suivi doit être un chemin ou un dictionnaire.")
+        current = str(fields.get("file") or fields.get("path") or "").strip("/")
+        if not current:
+            raise ValueError("projet.yml: un fichier suivi doit définir file.")
+        history = fields.get("history_files", fields.get("history", []))
+        if not isinstance(history, list) or not all(isinstance(path, str) for path in history):
+            raise ValueError("projet.yml: history_files doit être une liste de chemins.")
+        file_id = str(fields.get("id") or current)
+        result[file_id] = {
+            **fields,
+            "id": file_id,
+            "title": str(fields.get("title") or PurePosixPath(current).stem),
+            "file": current,
+            "history_files": [str(path).strip("/") for path in history],
+            "_history_explicit": "history_files" in fields or "history" in fields,
+        }
+    return result
+
+
+def configured_file_paths(files: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Associe chaque chemin courant ou historique à l'identifiant du fichier."""
+    paths: dict[str, str] = {}
+    for file_id, fields in files.items():
+        for path in [fields["file"], *fields.get("history_files", [])]:
+            key = str(PurePosixPath(path)).casefold()
+            owner = paths.get(key)
+            if owner and owner != file_id:
+                raise ValueError(f"projet.yml: le fichier {path} est suivi deux fois.")
+            paths[key] = file_id
+    return paths
+
+
+def reconstructed_file_paths(
+    configured_paths: dict[str, str],
+    tracked_files: dict[str, dict[str, Any]],
+    commits: list[Any],
+    changes_by_commit: dict[str, list[Any]],
+) -> dict[str, str]:
+    """Remonte les renommages Git des fichiers sans historique explicite."""
+    paths = dict(configured_paths)
+    protected = {
+        file_id
+        for file_id, fields in tracked_files.items()
+        if fields.get("_history_explicit")
+    }
+    for commit in reversed(commits):
+        for change in reversed(changes_by_commit.get(commit.sha, [])):
+            if change.status != "R" or not change.old_path or not change.new_path:
+                continue
+            file_id = paths.get(change.new_path.casefold())
+            if file_id and file_id not in protected:
+                paths.setdefault(change.old_path.casefold(), file_id)
+    return paths
 
 
 def path_key(path: str) -> str:
@@ -287,6 +355,19 @@ def classification_blocks(parts: Iterable[str]) -> list[str]:
             else:
                 blocks.append(pending_separator)
     return blocks
+
+
+def whole_file_is_internal(
+    hashes: list[str], known_hashes: set[str], threshold: float, repeated: bool = False
+) -> bool:
+    ratio = sum(1 for value in hashes if value in known_hashes) / len(hashes) if hashes else 0.0
+    return bool(hashes and (ratio >= threshold or (repeated and ratio >= 0.5)))
+
+
+def added_block_is_internal(
+    hashes: list[str], known_hashes: set[str], force: bool = False
+) -> bool:
+    return bool(hashes and (any(value in known_hashes for value in hashes) or force))
 
 
 def infer_edited_renames(
@@ -637,7 +718,10 @@ def normalize_size_history(size_points: list[dict[str, Any]]) -> None:
                 point["size"] = int(following["size"])
 
 
-def config_fingerprint(config: dict[str, Any], metadata: dict[str, Any]) -> str:
+def config_fingerprint(
+    config: dict[str, Any],
+    metadata: dict[str, Any],
+) -> str:
     relevant = {
         "excluded_folders": config["excluded_folders"],
         "file_extensions": config["file_extensions"],
@@ -689,6 +773,10 @@ def empty_state(fingerprint: str) -> dict[str, Any]:
         "archive_moves": {},
         "deletion_candidates": [],
         "file_lifecycles": {},
+        "tracked_file_events": [],
+        "tracked_file_sizes": {},
+        "tracked_file_current_paths": {},
+        "tracked_file_size_points": [],
     }
 
 
@@ -746,6 +834,7 @@ def process_history_diff(
     state: dict[str, Any],
     config: dict[str, Any],
     metadata: dict[str, Any],
+    tracked_files: dict[str, dict[str, Any]],
     fingerprint_db: Path,
     persist_index: bool = True,
 ) -> tuple[int, int]:
@@ -811,6 +900,11 @@ def process_history_diff(
     archive_moves = state["archive_moves"]
     deletion_candidates = state["deletion_candidates"]
     file_lifecycles = state.setdefault("file_lifecycles", {})
+    tracked_paths = configured_file_paths(tracked_files)
+    tracked_file_events = state.setdefault("tracked_file_events", [])
+    tracked_file_sizes = state.setdefault("tracked_file_sizes", {})
+    tracked_file_current_paths = state.setdefault("tracked_file_current_paths", {})
+    tracked_file_size_points = state.setdefault("tracked_file_size_points", [])
 
     def active_excluded_size(project: str) -> int:
         """Taille des seules compilations actuellement présentes."""
@@ -864,6 +958,12 @@ def process_history_diff(
             protected_projects,
             size_mode=True,
         )
+        tracked_paths = reconstructed_file_paths(
+            tracked_paths,
+            tracked_files,
+            commits,
+            full_changes,
+        )
 
     # Un full est une reconstruction sans état caché : la base est toujours
     # purgée avant de rejouer le premier commit.
@@ -892,6 +992,7 @@ def process_history_diff(
             absolute_index = start + relative_index
             display_index = absolute_index if full_run else relative_index
             work: dict[str, dict[str, Any]] = defaultdict(new_bucket)
+            touched_tracked_files: set[str] = set()
             touched_sizes: set[str] = set()
             change_records: list[dict[str, Any]] = []
             commit_added_hashes: list[str] = []
@@ -984,6 +1085,19 @@ def process_history_diff(
                 new_project = project_for(new_path, extensions, excluded, history_paths)
                 if not new_project and old_project and change.status in {"M", "R"}:
                     new_project = old_project
+                old_tracked_file = tracked_paths.get(old_path.casefold()) if old_path else None
+                new_tracked_file = tracked_paths.get(new_path.casefold()) if new_path else None
+                if change.status in {"M", "R"}:
+                    old_tracked_file = old_tracked_file or new_tracked_file
+                    new_tracked_file = new_tracked_file or old_tracked_file
+                if old_tracked_file and change.status != "C":
+                    tracked_file_sizes[old_tracked_file] = 0
+                    tracked_file_current_paths.pop(old_tracked_file, None)
+                    touched_tracked_files.add(old_tracked_file)
+                if new_tracked_file:
+                    tracked_file_sizes[new_tracked_file] = len(new_text)
+                    tracked_file_current_paths[new_tracked_file] = new_path
+                    touched_tracked_files.add(new_tracked_file)
                 old_size_project, old_size_root = size_location_for(
                     old_path, extensions, excluded, size_paths
                 )
@@ -1112,6 +1226,8 @@ def process_history_diff(
                     "new_path": new_path if new_md else None,
                     "old_project": old_project,
                     "new_project": new_project,
+                    "old_tracked_file": old_tracked_file,
+                    "new_tracked_file": new_tracked_file,
                     "index_project": fallback_project(new_path or old_path, new_project or old_project),
                     "added_blocks": added_blocks,
                     "whole_added_block": whole_added_block,
@@ -1252,6 +1368,13 @@ def process_history_diff(
                         ]
                     else:
                         contribution_event["internal_chars"] += moved_real
+                    file_event_index = contribution.get("file_event_index")
+                    if file_event_index is not None:
+                        file_event = tracked_file_events[int(file_event_index)]
+                        file_event["real_chars"] -= min(
+                            int(contribution.get("real_chars", 0)),
+                            int(file_event["real_chars"]),
+                        )
                 original_event.setdefault("temporary_compilations", []).append({
                     "file": old_path,
                     "removed_commit": commit.sha,
@@ -1299,7 +1422,8 @@ def process_history_diff(
             commit_known_hashes = set(known_hashes)
             for record in change_records:
                 new_project = record["new_project"]
-                if new_project:
+                new_tracked_file = record["new_tracked_file"]
+                if new_project or new_tracked_file:
                     blocks_to_classify = record["added_blocks"]
                     whole_added = record["whole_added_block"]
                     if whole_added:
@@ -1319,8 +1443,11 @@ def process_history_diff(
                         repeated_compilation = (
                             record["reappeared_file"] and whole_ratio >= 0.5
                         )
-                        if whole_hashes and (
-                            whole_ratio >= overlap_threshold or repeated_compilation
+                        if whole_file_is_internal(
+                            whole_hashes,
+                            commit_known_hashes,
+                            overlap_threshold,
+                            record["reappeared_file"],
                         ):
                             blocks_to_classify = [whole_added]
                             record["force_whole_internal"] = repeated_compilation
@@ -1333,12 +1460,16 @@ def process_history_diff(
                         # de 36 caractères suffit à conserver la filiation. Un
                         # seuil de 85 % recréditerait tout un groupe de phrases
                         # dès que quelques mots ont été corrigés.
-                        if block_hashes and (
-                            matched > 0 or record.get("force_whole_internal", False)
+                        if added_block_is_internal(
+                            block_hashes,
+                            commit_known_hashes,
+                            record.get("force_whole_internal", False),
                         ):
-                            work[new_project]["internal"] += len(part)
+                            if new_project:
+                                work[new_project]["internal"] += len(part)
                             record["internal_chars"] += len(part)
-                            work[new_project]["internal_hashes"].update(block_hashes)
+                            if new_project:
+                                work[new_project]["internal_hashes"].update(block_hashes)
                             origin_counts: dict[tuple[str, str, str], int] = defaultdict(int)
                             for value in block_hashes:
                                 source = source_by_hash.get(value)
@@ -1355,24 +1486,26 @@ def process_history_diff(
                                     origin_counts.items(), key=lambda item: item[1], reverse=True
                                 )
                             ]
-                            work[new_project]["sources"].append({
-                                "target_file": record["new_path"],
-                                "characters": len(part),
-                                "matching_hashes": matched,
-                                "total_hashes": len(block_hashes),
-                                "overlap_ratio": round(ratio, 6),
-                                "origins": origins,
-                            })
+                            if new_project:
+                                work[new_project]["sources"].append({
+                                    "target_file": record["new_path"],
+                                    "characters": len(part),
+                                    "matching_hashes": matched,
+                                    "total_hashes": len(block_hashes),
+                                    "overlap_ratio": round(ratio, 6),
+                                    "origins": origins,
+                                })
                         else:
-                            work[new_project]["novel"] += len(part)
+                            if new_project:
+                                work[new_project]["novel"] += len(part)
                             record["novel_chars"] += len(part)
                         for value in block_hashes:
                             source_by_hash.setdefault(
                                 value,
-                                (new_project, record["new_path"], commit.sha),
+                                (new_project or "", record["new_path"], commit.sha),
                             )
                         commit_known_hashes.update(block_hashes)
-                    if record["removed_blocks"] and record["status"] not in {"R", "C"}:
+                    if new_project and record["removed_blocks"] and record["status"] not in {"R", "C"}:
                         target = record["old_project"] or new_project
                         work[target]["removed"].extend(
                             (record["old_path"], part, block_hashes)
@@ -1442,6 +1575,32 @@ def process_history_diff(
                     })
                     fingerprints.add_deletion_candidate(candidate_id, removed_hashes)
 
+            tracked_file_event_indexes: dict[str, int] = {}
+            tracked_file_work: dict[str, dict[str, Any]] = defaultdict(
+                lambda: {"real_chars": 0, "internal_chars": 0, "paths": set()}
+            )
+            for record in change_records:
+                file_id = record["new_tracked_file"] or record["old_tracked_file"]
+                if not file_id:
+                    continue
+                tracked_file_work[file_id]["real_chars"] += int(record["novel_chars"])
+                tracked_file_work[file_id]["internal_chars"] += int(record["internal_chars"])
+                if record["new_path"]:
+                    tracked_file_work[file_id]["paths"].add(record["new_path"])
+                elif record["old_path"]:
+                    tracked_file_work[file_id]["paths"].add(record["old_path"])
+            for file_id, values in tracked_file_work.items():
+                tracked_file_event_indexes[file_id] = len(tracked_file_events)
+                tracked_file_events.append({
+                    "timestamp": commit.timestamp,
+                    "interval_start": commit_intervals.get(commit.sha),
+                    "commit": commit.sha,
+                    "file": file_id,
+                    "real_chars": values["real_chars"],
+                    "internal_chars": values["internal_chars"],
+                    "paths": sorted(values["paths"]),
+                })
+
             for record in change_records:
                 if record["status"] != "A" or not record["new_path"] or not record["new_project"]:
                     continue
@@ -1455,10 +1614,12 @@ def process_history_diff(
                     "event_index": event_indexes[record["new_project"]],
                     "real_chars": int(record["novel_chars"]),
                     "internal_chars": int(record["internal_chars"]),
+                    "file_event_index": tracked_file_event_indexes.get(record["new_tracked_file"]),
                     "contributions": [{
                         "event_index": event_indexes[record["new_project"]],
                         "real_chars": int(record["novel_chars"]),
                         "internal_chars": int(record["internal_chars"]),
+                        "file_event_index": tracked_file_event_indexes.get(record["new_tracked_file"]),
                     }],
                     "overlap_ratio": round(overlap_ratio, 6),
                     "project": record["new_project"],
@@ -1487,6 +1648,7 @@ def process_history_diff(
                         "event_index": event_indexes[record["new_project"]],
                         "real_chars": int(record["novel_chars"]),
                         "internal_chars": int(record["internal_chars"]),
+                        "file_event_index": tracked_file_event_indexes.get(record["new_tracked_file"]),
                     })
 
             if work:
@@ -1521,6 +1683,15 @@ def process_history_diff(
                     project in work,
                 ))
             fingerprints.record_project_commits(commit.sha, project_commit_snapshots)
+            for file_id in sorted(tracked_file_sizes):
+                tracked_file_size_points.append({
+                    "timestamp": commit.timestamp,
+                    "commit": commit.sha,
+                    "file": file_id,
+                    "path": tracked_file_current_paths.get(file_id),
+                    "size": int(tracked_file_sizes[file_id]),
+                    "touched": file_id in touched_tracked_files,
+                })
             state["last_commit"] = commit.sha
             state["initialized_projects"] = sorted(initialized_projects)
             progress.update(display_index)
@@ -1579,9 +1750,158 @@ def process_history_diff(
     return len(pending), relevant_commits
 
 
+def process_tracked_files(
+    repo: Path,
+    state: dict[str, Any],
+    config: dict[str, Any],
+    tracked_files: dict[str, dict[str, Any]],
+    fingerprint_db: Path,
+) -> int:
+    """Reconstruit uniquement les métriques Files depuis l'index existant."""
+    commits = list_commits(repo)
+    changes_by_commit = changed_paths_batch(
+        repo, [commit.sha for commit in commits], detect_renames=True
+    )
+    tracked_paths = reconstructed_file_paths(
+        configured_file_paths(tracked_files),
+        tracked_files,
+        commits,
+        changes_by_commit,
+    )
+    extensions = {
+        str(ext).lower() if str(ext).startswith(".") else f".{str(ext).lower()}"
+        for ext in config["file_extensions"]
+    }
+    gram_chars = int(config["internal_detection"]["gram_chars"])
+    selection_chars = int(config["internal_detection"]["selection_chars"])
+    overlap_threshold = float(config["internal_detection"]["overlap_threshold"])
+    events: list[dict[str, Any]] = []
+    sizes: dict[str, int] = {}
+    current_paths: dict[str, str] = {}
+    size_points: list[dict[str, Any]] = []
+    relevant_commits = 0
+    previous_timestamp: str | None = None
+    progress = ProgressBar("Analyse des fichiers", len(commits))
+
+    with FingerprintIndex(fingerprint_db) as fingerprints, BlobReader(repo) as blobs:
+        for index, commit in enumerate(commits, start=1):
+            raw_changes = changes_by_commit.get(commit.sha, [])
+            touched: set[str] = set()
+            if any(
+                (change.old_path and change.old_path.casefold() in tracked_paths)
+                or (change.new_path and change.new_path.casefold() in tracked_paths)
+                for change in raw_changes
+            ):
+                commit_changes = infer_edited_renames(
+                    commit.sha,
+                    raw_changes,
+                    blobs,
+                    extensions,
+                    gram_chars,
+                    selection_chars,
+                )
+                commit_events: dict[str, dict[str, Any]] = defaultdict(
+                    lambda: {"real_chars": 0, "internal_chars": 0, "paths": set()}
+                )
+                for change in commit_changes:
+                    old_path = change.old_path or (
+                        change.new_path if change.status != "A" else None
+                    )
+                    new_path = change.new_path
+                    old_file = tracked_paths.get(old_path.casefold()) if old_path else None
+                    new_file = tracked_paths.get(new_path.casefold()) if new_path else None
+                    if change.status in {"M", "R"}:
+                        old_file = old_file or new_file
+                        new_file = new_file or old_file
+                    file_id = new_file or old_file
+                    if not file_id:
+                        continue
+                    old_text = (
+                        blobs.text(f"{commit.sha}^", old_path) or ""
+                        if old_path and PurePosixPath(old_path).suffix.lower() in extensions
+                        else ""
+                    )
+                    new_text = (
+                        blobs.text(commit.sha, new_path) or ""
+                        if new_path and PurePosixPath(new_path).suffix.lower() in extensions
+                        else ""
+                    )
+                    if old_file and change.status != "C":
+                        sizes[old_file] = 0
+                        current_paths.pop(old_file, None)
+                        touched.add(old_file)
+                    if new_file:
+                        sizes[new_file] = len(new_text)
+                        current_paths[new_file] = new_path
+                        touched.add(new_file)
+                    if not new_file or not new_text:
+                        continue
+                    if change.status == "A":
+                        added_parts = [new_text]
+                    else:
+                        added_parts, _ = character_changes(old_text, new_text)
+                    blocks = [
+                        (part, winnowed_hashes(part, gram_chars, selection_chars))
+                        for part in classification_blocks(added_parts)
+                    ]
+                    all_hashes = [value for _, hashes in blocks for value in hashes]
+                    known = fingerprints.known_before_commit(
+                        all_hashes, commit.sha, new_path
+                    )
+                    if change.status == "A":
+                        whole_hashes = winnowed_hashes(
+                            new_text, gram_chars, selection_chars
+                        )
+                        whole_known = fingerprints.known_before_commit(
+                            whole_hashes, commit.sha, new_path
+                        )
+                        if whole_file_is_internal(
+                            whole_hashes, whole_known, overlap_threshold
+                        ):
+                            blocks = [(new_text, whole_hashes)]
+                            known = whole_known
+                    for part, block_hashes in blocks:
+                        if added_block_is_internal(block_hashes, known):
+                            commit_events[file_id]["internal_chars"] += len(part)
+                        else:
+                            commit_events[file_id]["real_chars"] += len(part)
+                        known.update(block_hashes)
+                    commit_events[file_id]["paths"].add(new_path)
+                for file_id, values in commit_events.items():
+                    events.append({
+                        "timestamp": commit.timestamp,
+                        "interval_start": previous_timestamp,
+                        "commit": commit.sha,
+                        "file": file_id,
+                        "real_chars": int(values["real_chars"]),
+                        "internal_chars": int(values["internal_chars"]),
+                        "paths": sorted(values["paths"]),
+                    })
+                if touched:
+                    relevant_commits += 1
+            for file_id in sorted(sizes):
+                size_points.append({
+                    "timestamp": commit.timestamp,
+                    "commit": commit.sha,
+                    "file": file_id,
+                    "path": current_paths.get(file_id),
+                    "size": int(sizes[file_id]),
+                    "touched": file_id in touched,
+                })
+            previous_timestamp = commit.timestamp
+            progress.update(index)
+
+    state["tracked_file_events"] = events
+    state["tracked_file_sizes"] = sizes
+    state["tracked_file_current_paths"] = current_paths
+    state["tracked_file_size_points"] = size_points
+    state["tracked_file_metadata"] = tracked_files
+    return relevant_commits
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Analyse l'activité d'écriture d'un vault Git")
-    parser.add_argument("mode", nargs="?", choices=("full", "incremental"), default="incremental", help="full rejoue tout ; incremental traite uniquement les nouveaux commits")
+    parser.add_argument("mode", nargs="?", choices=("full", "incremental", "files"), default="incremental", help="full rejoue tout ; incremental traite les nouveaux commits ; files reconstruit uniquement Files")
     parser.add_argument("--config", default=None, help="Chemin de config.yaml")
     parser.add_argument("--full-rebuild", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--dry-run", action="store_true", help="Analyser sans modifier la base SQLite")
@@ -1592,6 +1912,7 @@ def main() -> int:
     try:
         config = normalized_config(load_yaml(config_path))
         project_file = json_compatible(load_yaml(base_dir / "projet.yml"))
+        tracked_files = tracked_file_settings(project_file)
         metadata, project_excluded_folders = project_file_settings(project_file)
         if project_excluded_folders is not None:
             config["excluded_folders"] = project_excluded_folders
@@ -1609,6 +1930,37 @@ def main() -> int:
             )
         ensure_repository(history_repo)
         fingerprint = config_fingerprint(config, metadata)
+        if args.mode == "files":
+            if not fingerprint_db.exists():
+                raise ValueError("Base d'analyse absente ; lancez d'abord : ./analyse.sh full")
+            with FingerprintIndex(fingerprint_db) as database:
+                state = database.load_analysis_state()
+            if not state:
+                raise ValueError("État d'analyse absent ; lancez d'abord : ./analyse.sh full")
+            if state.get("project_metadata", {}) != metadata:
+                raise ValueError(
+                    "La configuration des projets a changé ; lancez ./analyse.sh full."
+                )
+            relevant = process_tracked_files(
+                history_repo,
+                state,
+                config,
+                tracked_files,
+                fingerprint_db,
+            )
+            state["config_fingerprint"] = fingerprint
+            if not args.dry_run:
+                with FingerprintIndex(fingerprint_db) as database:
+                    database.save_analysis(state)
+                    database.commit()
+            suffix = " (simulation, aucun fichier écrit)" if args.dry_run else ""
+            print(
+                f"Analyse files terminée{suffix} : "
+                f"{relevant} commit(s) touchant les fichiers suivis."
+            )
+            if not args.dry_run:
+                print(f"Analyse enregistrée dans {fingerprint_db}")
+            return 0
         full_rebuild = args.mode == "full" or args.full_rebuild
         temporary_database = None
         processing_database = fingerprint_db
@@ -1626,12 +1978,14 @@ def main() -> int:
             state,
             config,
             metadata,
+            tracked_files,
             processing_database,
             persist_index=not args.dry_run,
         )
         # Le générateur web dispose ainsi des titres et réglages associés à
         # l'état analysé sans relire ni interpréter le vault.
         state["project_metadata"] = metadata
+        state["tracked_file_metadata"] = tracked_files
         if not args.dry_run:
             with FingerprintIndex(fingerprint_db) as database:
                 database.save_analysis(state)
