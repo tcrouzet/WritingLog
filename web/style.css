@@ -5,7 +5,6 @@ body { margin: 0; color: var(--ink); background: #fff; font: 14px/1.45 Arial, He
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; color: #fff; background: var(--blue); font-size: 18px; font-weight: 600; }
 h1 { margin: 0; font-size: 20px; font-weight: 500; }
-#selected-project-title { margin: 3px 0 0; color: var(--ink); font-size: 20px; font-weight: 500; line-height: 1.15; }
 .toolbar { display: flex; align-items: center; gap: 12px; }
 .toolbar label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 select { min-width: 160px; padding: 9px 32px 9px 12px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: #fff; font: inherit; }
@@ -38,9 +37,10 @@ main { width: min(1400px, 100%); margin: 0 auto; padding: 28px; }
 .activity { min-width: 320px; }
 .activity svg { display: block; width: auto; max-width: none; height: auto; }
 .activity-cell { cursor: pointer; }
-.activity-cell:focus, .activity-cell.is-selected { outline: none; stroke: var(--blue); stroke-width: 3px; }
+.activity-cell:focus { outline: none; stroke: var(--blue); stroke-width: 3px; }
+.activity-cell.is-selected { fill: #d93025 !important; stroke: #b3261e; stroke-width: 2px; }
 .activity-resolution { min-width: 3.5rem; color: var(--muted); font-size: 12px; text-align: right; }
-.activity-detail { display: block; min-height: 20px; margin-top: 8px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.activity-detail { display: block; min-height: 20px; margin-top: 8px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: pre-line; }
 .activity-detail[hidden] { display: none; }
 .chart-download { appearance: none; flex: 0 0 auto; width: 2.2rem; height: 2.2rem; padding: .25rem; border: 1px solid #cfc8c0; border-radius: .3125rem; background: white url("assets/images/download-button.svg") center / 1.35rem no-repeat; color: transparent; cursor: pointer; }
 .chart-download:hover { border-color: #9aa0a6; background-color: #f8f9fa; }

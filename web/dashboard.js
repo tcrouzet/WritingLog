@@ -8,6 +8,9 @@
   const formatter = new Intl.NumberFormat("fr-FR");
   const storageKey = "writing-log-preferences-v1";
   const zoomLevels = [1, 1.5, 2, 3, 4, 6];
+  const parisHourFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23"
+  });
   let data;
   let selectedProject = "all";
   let productionGranularity = "day";
@@ -17,7 +20,7 @@
   const activityResolutions = [60, 30, 15];
   const weekdayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const isDayBoundary = context => context.tick?.value !== undefined
-    && new Date(context.tick.value).getUTCHours() === 0;
+    && Number(parisHourFormatter.format(new Date(context.tick.value))) === 0;
 
   const selectionKind = () => selectedProject.startsWith("file:") ? "file" : selectedProject === "all" ? "all" : "project";
   const selectionId = () => selectedProject.replace(/^(project|file):/, "");
@@ -137,16 +140,16 @@
       return `S${String(week).padStart(2, "0")}`;
     };
     const label = value => unit === "hour"
-      ? (() => {
+        ? (() => {
           const date = new Date(value);
-          const hour = date.getUTCHours();
+          const hour = Number(parisHourFormatter.format(date));
           const zoom = zoomName ? zooms[zoomName] : 1;
           const interval = zoom >= 4 ? 1 : zoom >= 2 ? 2 : 6;
-          if (hour === 0) return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(date);
+          if (hour === 0) return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "Europe/Paris" }).format(date);
           return hour % interval === 0 ? `${hour} h` : "";
         })()
       : unit === "day"
-        ? new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(value))
+        ? new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", timeZone: "Europe/Paris" }).format(new Date(value))
         : unit === "week"
           ? weekLabel(value)
           : new Intl.DateTimeFormat("fr-FR", unit === "month" ? { month: "short", year: "numeric", timeZone: "UTC" } : { year: "numeric", timeZone: "UTC" }).format(new Date(value));
@@ -164,7 +167,7 @@
         tooltip: {
           padding: 10,
           callbacks: temporal ? {
-            title: items => new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(items[0].parsed.x))
+            title: items => new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "Europe/Paris" }).format(new Date(items[0].parsed.x))
           } : undefined
         }
       },
@@ -196,7 +199,7 @@
   }
 
   function productionPeriodLabel(period, kind) {
-    if (kind === "minute" || kind === "hour") return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" }).format(new Date(period));
+    if (kind === "minute" || kind === "hour") return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(period));
     if (kind === "week") return `Semaine ${period}`;
     if (kind === "month") return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${period}-01T12:00:00Z`));
     return new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${period}T12:00:00Z`));
@@ -329,7 +332,7 @@
   function fileActivityGrid(svg) {
     const rows = data.file_activity
       .filter(row => row.fichier === selectionId())
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
     const buckets = new Map();
     for (const row of rows) {
       const day = row.timestamp.slice(0, 10);
@@ -337,9 +340,8 @@
       const minute = Number(row.timestamp.slice(14, 16));
       const slot = Math.floor((hour * 60 + minute) / activityCellMinutes);
       const key = `${day}:${slot}`;
-      const bucket = buckets.get(key) || { day, slot, chars: 0, commits: 0 };
+      const bucket = buckets.get(key) || { day, slot, chars: 0 };
       bucket.chars += Number(row.signes_reels) || 0;
-      bucket.commits += 1;
       buckets.set(key, bucket);
     }
     const days = [];
@@ -367,6 +369,39 @@
     const gridHeight = rowsPerColumn * cellHeight;
     const width = Math.max(1, days.length * dayWidth);
     const height = gridHeight + 26;
+    let producedSoFar = 0;
+    const cumulativeByKey = new Map();
+    for (const day of days) {
+      for (let slot = 0; slot < slotsPerDay; slot += 1) {
+        const key = `${day}:${slot}`;
+        const bucket = buckets.get(key);
+        producedSoFar += bucket?.chars || 0;
+        cumulativeByKey.set(key, producedSoFar);
+      }
+    }
+    const cadence = writingCadence(rows);
+    const writingMinutesAtEvent = new Map();
+    let writingMinutes = 0;
+    let previousTimestamp = null;
+    for (const row of rows) {
+      const timestamp = Date.parse(row.timestamp);
+      const gap = previousTimestamp === null ? cadence : (timestamp - previousTimestamp) / 60000;
+      if (cadence !== null) writingMinutes += previousTimestamp === null || gap > cadence * 4 ? cadence : gap;
+      const day = row.timestamp.slice(0, 10);
+      const minute = Number(row.timestamp.slice(11, 13)) * 60 + Number(row.timestamp.slice(14, 16));
+      const slot = Math.floor(minute / activityCellMinutes);
+      writingMinutesAtEvent.set(`${day}:${slot}`, writingMinutes);
+      previousTimestamp = timestamp;
+    }
+    const writingMinutesByKey = new Map();
+    let accumulatedWritingMinutes = 0;
+    for (const day of days) {
+      for (let slot = 0; slot < slotsPerDay; slot += 1) {
+        const key = `${day}:${slot}`;
+        if (writingMinutesAtEvent.has(key)) accumulatedWritingMinutes = writingMinutesAtEvent.get(key);
+        writingMinutesByKey.set(key, accumulatedWritingMinutes);
+      }
+    }
     const stage = document.querySelector("#file-activity-stage");
     stage.style.width = `${width}px`;
     stage.style.height = "";
@@ -376,6 +411,9 @@
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("shape-rendering", "crispEdges");
     const detail = document.querySelector("#file-activity-detail");
+    const sizeHistory = data.file_size_evolution
+      .filter(row => row.fichier === selectionId() && !row.estime)
+      .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     detail.hidden = true;
     detail.textContent = "";
 
@@ -388,22 +426,39 @@
         rectangle.setAttribute("y", String((slot % rowsPerColumn) * cellHeight));
         rectangle.setAttribute("width", String(cellWidth));
         rectangle.setAttribute("height", String(cellHeight));
-        rectangle.setAttribute("fill", chars ? `rgb(26 115 232 / ${0.22 + 0.78 * Math.sqrt(chars / maximum)})` : "#fff");
+        const fill = chars ? `rgb(26 115 232 / ${0.22 + 0.78 * Math.sqrt(chars / maximum)})` : "#fff";
+        rectangle.setAttribute("fill", fill);
+        rectangle.setAttribute("data-fill", fill);
         rectangle.setAttribute("stroke", "#dadce0");
         rectangle.setAttribute("class", "activity-cell");
         rectangle.setAttribute("tabindex", "0");
         const tooltip = document.createElementNS(namespace, "title");
         const date = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
         const start = slot * activityCellMinutes;
-        const end = start + activityCellMinutes - 1;
         const time = value => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
-        const details = `${date}, ${time(start)}–${time(end)} : ${formatter.format(chars)} signes, ${formatter.format(bucket?.commits || 0)} commit${bucket?.commits > 1 ? "s" : ""}`;
+        const speed = chars > 0 ? Math.round(chars * 60 / activityCellMinutes) : null;
+        const documentSize = fileSizeAt(
+          sizeHistory,
+          parisTimestamp(day, start + activityCellMinutes)
+        );
+        const details = [
+          `${date}, ${time(start)}–${time(start + activityCellMinutes)}`,
+          `Texte produit sur la tranche : ${formatter.format(chars)} signes`,
+          `Texte produit jusque-là : ${formatter.format(cumulativeByKey.get(`${day}:${slot}`) || 0)} signes`,
+          `Temps passé estimé depuis le début : ${cadence === null ? "—" : durationLabel(writingMinutesByKey.get(`${day}:${slot}`) || 0)}`,
+          `Taille du document à cet instant : ${formatter.format(documentSize)} signes`,
+          `Vitesse sur cette tranche : ${speed === null ? "—" : `${formatter.format(speed)} signes/heure`}`
+        ].join("\n");
         rectangle.setAttribute("aria-label", details);
         tooltip.textContent = details;
         rectangle.append(tooltip);
         rectangle.addEventListener("click", () => {
-          svg.querySelectorAll(".activity-cell.is-selected").forEach(cell => cell.classList.remove("is-selected"));
+          svg.querySelectorAll(".activity-cell.is-selected").forEach(cell => {
+            cell.classList.remove("is-selected");
+            cell.setAttribute("fill", cell.dataset.fill);
+          });
           rectangle.classList.add("is-selected");
+          rectangle.setAttribute("fill", "#d93025");
           detail.textContent = details;
           detail.hidden = false;
         });
@@ -453,17 +508,13 @@
   function writingEstimate() {
     const rows = data.file_activity
       .filter(row => row.fichier === selectionId())
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
     if (rows.length < 2) return null;
+    const cadence = writingCadence(rows);
+    if (!cadence) return null;
     const gaps = rows.slice(1).map((row, index) => (
-      new Date(row.timestamp) - new Date(rows[index].timestamp)
-    ) / 60000).filter(value => value > 0);
-    if (!gaps.length) return null;
-    const ordered = gaps.slice().sort((a, b) => a - b);
-    const middle = Math.floor(ordered.length / 2);
-    const cadence = ordered.length % 2
-      ? ordered[middle]
-      : (ordered[middle - 1] + ordered[middle]) / 2;
+      (Date.parse(row.timestamp) - Date.parse(rows[index].timestamp)) / 60000
+    ));
     const sessionLimit = cadence * 4;
     const minutes = gaps.reduce(
       (total, gap) => total + (gap <= sessionLimit ? gap : cadence),
@@ -471,6 +522,18 @@
     );
     const characters = rows.reduce((total, row) => total + (Number(row.signes_reels) || 0), 0);
     return { minutes, speed: minutes > 0 ? Math.round(characters * 60 / minutes) : null };
+  }
+
+  function writingCadence(rows) {
+    const gaps = rows.slice(1).map((row, index) => (
+      (Date.parse(row.timestamp) - Date.parse(rows[index].timestamp)) / 60000
+    )).filter(value => value > 0);
+    if (!gaps.length) return null;
+    const ordered = gaps.sort((a, b) => a - b);
+    const middle = Math.floor(ordered.length / 2);
+    return ordered.length % 2
+      ? ordered[middle]
+      : (ordered[middle - 1] + ordered[middle]) / 2;
   }
 
   function durationLabel(minutes) {
@@ -509,6 +572,33 @@
         ? current === 0
         : current === activityResolutions.length - 1;
     });
+  }
+
+  function parisTimestamp(day, minuteOfDay) {
+    const [year, month, date] = day.split("-").map(Number);
+    const localAsUtc = Date.UTC(year, month - 1, date, 0, minuteOfDay);
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Paris",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    }).formatToParts(new Date(localAsUtc));
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    const representedAsUtc = Date.UTC(
+      Number(values.year), Number(values.month) - 1, Number(values.day),
+      Number(values.hour), Number(values.minute)
+    );
+    return localAsUtc - (representedAsUtc - localAsUtc);
+  }
+
+  function fileSizeAt(rows, timestamp) {
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (Date.parse(rows[middle].date) <= timestamp) low = middle + 1;
+      else high = middle;
+    }
+    return low ? Number(rows[low - 1].taille_signes) || 0 : 0;
   }
 
   function updateSelectionUrl() {
@@ -589,100 +679,36 @@
   }
 
   function chartPng(canvas) {
+    const chart = Chart.getChart(canvas);
+    const viewport = canvas.closest(".chart-scroll");
+    const ratio = canvas.width / chart.width;
+    const visibleWidth = viewport ? Math.min(viewport.clientWidth, chart.width) : chart.width;
+    const axisWidth = viewport ? chart.chartArea.left : 0;
     const exported = document.createElement("canvas");
-    exported.width = canvas.width;
+    exported.width = Math.round(visibleWidth * ratio);
     exported.height = canvas.height;
     const context = exported.getContext("2d");
     context.fillStyle = "#fff";
     context.fillRect(0, 0, exported.width, exported.height);
-    context.drawImage(canvas, 0, 0);
+    if (!viewport) {
+      context.drawImage(canvas, 0, 0);
+    } else {
+      const axisPixels = Math.round(axisWidth * ratio);
+      context.drawImage(canvas, 0, 0, axisPixels, canvas.height, 0, 0, axisPixels, canvas.height);
+      const plotWidth = exported.width - axisPixels;
+      const sourceX = Math.round((viewport.scrollLeft + axisWidth) * ratio);
+      context.drawImage(canvas, sourceX, 0, plotWidth, canvas.height, axisPixels, 0, plotWidth, canvas.height);
+    }
     return exported.toDataURL("image/png");
   }
 
-  function escapeXml(value) {
-    return String(value).replace(/[&<>"']/g, character => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&apos;"
-    })[character]);
-  }
-
-  function svgColor(value, fallback = "#5f6368") {
-    return typeof value === "string" ? value : fallback;
-  }
-
-  function chartSvg(chart) {
-    const width = chart.width;
+  function chartSvg(canvas) {
+    const chart = Chart.getChart(canvas);
+    const viewport = canvas.closest(".chart-scroll");
+    const width = viewport ? Math.min(viewport.clientWidth, chart.width) : chart.width;
     const height = chart.height;
-    const area = chart.chartArea;
-    const parts = [
-      `<?xml version="1.0" encoding="UTF-8"?>`,
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-      `<rect width="100%" height="100%" fill="white"/>`,
-      `<g font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5f6368">`
-    ];
-
-    for (const scale of Object.values(chart.scales)) {
-      const ticks = scale.ticks || [];
-      ticks.forEach((tick, index) => {
-        const position = scale.getPixelForTick(index);
-        const label = Array.isArray(tick.label) ? tick.label.join(" ") : tick.label;
-        if (scale.axis === "x") {
-          const dayBoundary = new Date(tick.value).getHours() === 0;
-          parts.push(`<line x1="${position}" y1="${area.top}" x2="${position}" y2="${area.bottom}" stroke="${dayBoundary ? "#202124" : "#dadce0"}" stroke-width="${dayBoundary ? 2 : 1}"${dayBoundary ? "" : ' stroke-dasharray="4 4"'}/>`);
-          parts.push(`<text x="${position}" y="${Math.min(height - 4, scale.bottom - 3)}" text-anchor="middle">${escapeXml(label ?? "")}</text>`);
-        } else {
-          if (scale.position !== "right") parts.push(`<line x1="${area.left}" y1="${position}" x2="${area.right}" y2="${position}" stroke="#e8eaed"/>`);
-          const right = scale.position === "right";
-          const x = right ? scale.right - 2 : scale.left + 2;
-          parts.push(`<text x="${x}" y="${position + 4}" text-anchor="${right ? "end" : "start"}">${escapeXml(label ?? "")}</text>`);
-        }
-      });
-    }
-
-    chart.data.datasets.forEach((dataset, datasetIndex) => {
-      const meta = chart.getDatasetMeta(datasetIndex);
-      if (meta.hidden) return;
-      if (meta.type === "bar") {
-        meta.data.forEach(element => {
-          const horizontal = meta.iScale?.axis === "y";
-          const x = horizontal ? Math.min(element.x, element.base) : element.x - element.width / 2;
-          const y = horizontal ? element.y - element.height / 2 : Math.min(element.y, element.base);
-          const barWidth = horizontal ? Math.abs(element.x - element.base) : element.width;
-          const barHeight = horizontal ? element.height : Math.abs(element.y - element.base);
-          parts.push(`<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="2" fill="${escapeXml(svgColor(element.options.backgroundColor))}" stroke="${escapeXml(svgColor(element.options.borderColor, "none"))}"/>`);
-        });
-      }
-      if (meta.type === "line") {
-        const points = meta.data.filter(point => !point.skip);
-        if (points.length) {
-          const path = points.map((point, index) => `${index ? "L" : "M"}${point.x} ${point.y}`).join(" ");
-          const stroke = svgColor(meta.dataset.options.borderColor, svgColor(dataset.borderColor));
-          parts.push(`<path d="${path}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${meta.dataset.options.borderWidth || 2}" stroke-linejoin="round" stroke-linecap="round"/>`);
-          points.forEach(point => {
-            const radius = Number(point.options.radius) || 0;
-            if (radius > 0) parts.push(`<circle cx="${point.x}" cy="${point.y}" r="${radius}" fill="${escapeXml(svgColor(point.options.backgroundColor, stroke))}"/>`);
-          });
-        }
-      }
-      if (meta.type === "scatter") {
-        meta.data.forEach(point => {
-          const radius = Number(point.options.radius) || 0;
-          parts.push(`<rect x="${point.x - radius}" y="${point.y - radius}" width="${radius * 2}" height="${radius * 2}" fill="${escapeXml(svgColor(point.options.backgroundColor))}"/>`);
-        });
-      }
-    });
-
-    const legend = chart.legend;
-    if (legend?.legendItems && legend?.legendHitBoxes) {
-      legend.legendItems.forEach((item, index) => {
-        const box = legend.legendHitBoxes[index];
-        if (!box) return;
-        const cy = box.top + box.height / 2;
-        parts.push(`<circle cx="${box.left + 5}" cy="${cy}" r="4" fill="${escapeXml(svgColor(item.fillStyle))}"/>`);
-        parts.push(`<text x="${box.left + 14}" y="${cy + 4}" fill="#5f6368">${escapeXml(item.text)}</text>`);
-      });
-    }
-    parts.push(`</g></svg>`);
-    return parts.join("\n");
+    const png = chartPng(canvas);
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><image width="${width}" height="${height}" href="${png}" xlink:href="${png}"/></svg>`;
   }
 
   function exportChart(canvas, format) {
@@ -699,7 +725,7 @@
       link.click();
       return;
     }
-    const svg = chartSvg(chart);
+    const svg = chartSvg(canvas);
     downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), `${filename}.svg`);
   }
 
@@ -707,7 +733,10 @@
     const heading = svg.closest(".panel")?.querySelector("h2")?.textContent || "graphique";
     const project = selectedProject === "all" ? "tous-les-projets" : title(selectedProject);
     const filename = `${safeFilename(project)}-${safeFilename(heading)}`;
-    const source = new XMLSerializer().serializeToString(svg);
+    const exportVisual = svg.id === "file-activity-chart" ? activityExportSvg(svg) : svg;
+    const width = Number(exportVisual.getAttribute("width"));
+    const height = Number(exportVisual.getAttribute("height"));
+    const source = new XMLSerializer().serializeToString(exportVisual);
     const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
     if (format === "svg") {
       downloadBlob(blob, `${filename}.svg`);
@@ -717,8 +746,6 @@
     const image = new Image();
     image.onload = () => {
       const scale = 2;
-      const width = Number(svg.getAttribute("width"));
-      const height = Number(svg.getAttribute("height"));
       const canvas = document.createElement("canvas");
       canvas.width = width * scale;
       canvas.height = height * scale;
@@ -734,6 +761,49 @@
       URL.revokeObjectURL(url);
     };
     image.src = url;
+  }
+
+  function activityExportSvg(svg) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const panel = svg.closest(".panel");
+    const detail = panel.querySelector("#file-activity-detail");
+    const detailLines = detail.hidden ? [] : detail.textContent.split("\n");
+    const viewport = svg.closest(".chart-scroll");
+    const width = Number(svg.getAttribute("width"));
+    const chartHeight = Number(svg.getAttribute("height"));
+    const detailHeight = detailLines.length ? detailLines.length * 18 + 10 : 0;
+    const height = chartHeight + detailHeight;
+    const visibleWidth = viewport ? Math.min(viewport.clientWidth, width) : width;
+    const scrollLeft = viewport ? Math.min(viewport.scrollLeft, Math.max(0, width - visibleWidth)) : 0;
+    const root = document.createElementNS(namespace, "svg");
+    root.setAttribute("xmlns", namespace);
+    root.setAttribute("width", String(visibleWidth));
+    root.setAttribute("height", String(height));
+    root.setAttribute("viewBox", `0 0 ${visibleWidth} ${height}`);
+    const background = document.createElementNS(namespace, "rect");
+    background.setAttribute("width", "100%");
+    background.setAttribute("height", "100%");
+    background.setAttribute("fill", "#fff");
+    root.append(background);
+    const addText = (text, x, y, size, weight = "normal") => {
+      const element = document.createElementNS(namespace, "text");
+      element.setAttribute("x", String(x));
+      element.setAttribute("y", String(y));
+      element.setAttribute("fill", "#202124");
+      element.setAttribute("font-family", "Arial, Helvetica, sans-serif");
+      element.setAttribute("font-size", String(size));
+      element.setAttribute("font-weight", weight);
+      element.textContent = text;
+      root.append(element);
+    };
+    const grid = svg.cloneNode(true);
+    grid.setAttribute("x", "0");
+    grid.setAttribute("y", "0");
+    grid.setAttribute("width", String(visibleWidth));
+    grid.setAttribute("viewBox", `${scrollLeft} 0 ${visibleWidth} ${chartHeight}`);
+    root.append(grid);
+    detailLines.forEach((line, index) => addText(line, 8, chartHeight + 18 * (index + 1), 12));
+    return root;
   }
 
   function installDownloadButtons() {
@@ -882,9 +952,6 @@
       savePreferences();
     }
     renderCards(filteredDaily());
-    const selectedTitle = document.querySelector("#selected-project-title");
-    selectedTitle.hidden = selectedProject === "all";
-    selectedTitle.textContent = selectedProject === "all" ? "" : title(selectedProject);
     const activityPanel = document.querySelector("#file-activity-panel");
     activityPanel.hidden = selectionKind() !== "file";
     if (!activityPanel.hidden) {
@@ -941,7 +1008,7 @@
     sizeOptions.elements = { line: { borderWidth: 2 } };
     sizeOptions.plugins.tooltip.callbacks = {
       title: items => new Intl.DateTimeFormat("fr-FR", {
-        dateStyle: "long", timeStyle: "medium"
+        dateStyle: "long", timeStyle: "medium", timeZone: "Europe/Paris"
       }).format(new Date(items[0].raw.timestamp)),
       label: context => `Taille : ${formatter.format(context.raw.y)} signes`,
       afterLabel: context => selectionKind() === "file"
