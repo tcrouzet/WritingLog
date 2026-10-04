@@ -29,3 +29,5 @@ cd /Users/thierrycrouzet/Documents/ObsidianLocal/text/
 
 ./analyse.sh files
 ./web.sh
+
+python scripts/animation.py
