@@ -19,7 +19,7 @@ Il va lire tout seul :
         Animation: "tcrouzet/2026/10/hypocrisie-editoriale.md"
 
   - `output_dir` dans config.yaml, pour écrire le résultat dans
-    `<output_dir>/animations/<nom-du-fichier>.gif`.
+    `<output_dir>/animations/<nom-du-fichier>.mp4`.
 
 Le document est reconstruit mot par mot, pas approximé par des bandes de
 couleur abstraites : chaque mot garde en mémoire le nombre de fois où il a
@@ -30,18 +30,15 @@ façon dégradé Photoshop :
   - réécrit deux fois -> jaune
   - réécrit trois fois ou plus -> rouge
 
-Mise en page verticale, pleine largeur, en trois blocs empilés :
-  A) le titre qui défile (date, +/- signes) ;
-  B) le graphique de taille cumulée, avec un repère qui avance ;
-  C) la page qui se remplit de haut en bas (comme on écrit), avec un vrai
-     retour à la ligne et des paragraphes, pour respecter la forme réelle
-     du texte plutôt qu'une simple barre étirée.
+Format vidéo 16:9 (type YouTube) : juste la date, le +/- signes, et la page
+qui se remplit de haut en bas (comme on écrit), avec un vrai retour à la
+ligne et des paragraphes, pour respecter la forme réelle du texte plutôt
+qu'une simple barre étirée. Pas de nom de fichier affiché, pas de graphique
+de progression (sacrifié au profit du format vidéo).
 
 Dépendances :
-    pip install matplotlib pillow
-
-Pour un export MP4 (plus léger, meilleure qualité), installez ffmpeg et
-changez OUTPUT_FORMAT ci-dessous, ou passez --output animation.mp4.
+    pip install matplotlib
+Export MP4 : nécessite ffmpeg installé et accessible dans le PATH.
 
 Si le fichier a été renommé ou déplacé pendant son histoire, le script suit
 les renommages Git automatiquement (comme `git log --follow`) : pas besoin
@@ -152,7 +149,7 @@ def resolve_animation_file(file_arg: str | None, projet_path: Path) -> str:
 
 
 def resolve_output(output_arg: Path | None, config_path: Path, file_path: str) -> Path:
-    """Fichier de sortie par défaut : <output_dir>/animations/<nom>.gif,
+    """Fichier de sortie par défaut : <output_dir>/animations/<nom>.mp4,
     <output_dir> étant celui déclaré dans config.yaml (par défaut "site")."""
     if output_arg is not None:
         return output_arg
@@ -160,7 +157,7 @@ def resolve_output(output_arg: Path | None, config_path: Path, file_path: str) -
     stem = Path(file_path).stem
     target_dir = config_path.parent / output_dir / "animations"
     target_dir.mkdir(parents=True, exist_ok=True)
-    return target_dir / f"{stem}.gif"
+    return target_dir / f"{stem}.mp4"
 
 
 @dataclass
@@ -409,11 +406,8 @@ def render(
     hold_frames: int,
     fps: int,
     dpi: int,
-    title: str,
     columns: int,
 ) -> None:
-    max_size = max(point["size"] for point in timeline) or 1
-
     # On précalcule la mise en page (retour à la ligne) de chaque commit une
     # bonne fois pour toutes, et la hauteur totale de page nécessaire pour
     # contenir la version la plus longue : le bandeau grandit sur une échelle
@@ -425,22 +419,13 @@ def render(
     # reste affiché.
     all_grids = [rows_to_grid(rows, total_rows, columns) for rows in all_rows]
 
-    # Format d'image fixe, indépendant du nombre de lignes : plus le texte
-    # est long, plus chaque ligne est tassée (rendue petite), mais l'image
-    # elle-même garde toujours la même forme raisonnable (pas de portrait
-    # interminable).
-    fig = plt.figure(figsize=(10, 8), facecolor="#0e1117")
-    grid = fig.add_gridspec(
-        2, 1,
-        height_ratios=[1, 3.2],
-        hspace=0.12,
-        top=0.78, bottom=0.04, left=0.07, right=0.97,
-    )
-    ax_size = fig.add_subplot(grid[0])
-    ax_page = fig.add_subplot(grid[1])
-
-    for ax in (ax_page, ax_size):
-        ax.set_facecolor("#0e1117")
+    # Format vidéo 16:9 (YouTube), indépendant du nombre de lignes : plus le
+    # texte est long, plus chaque ligne est tassée (rendue petite), mais
+    # l'image elle-même garde toujours ce même format.
+    fig = plt.figure(figsize=(16, 9), facecolor="#0e1117")
+    grid = fig.add_gridspec(1, 1, top=0.8, bottom=0.04, left=0.05, right=0.97)
+    ax_page = fig.add_subplot(grid[0])
+    ax_page.set_facecolor("#0e1117")
 
     # --- La page qui se remplit, mot par mot, de haut en bas --------------
     ax_page.set_xlim(0, columns)
@@ -458,24 +443,12 @@ def render(
         color="white", fontsize=11, fontweight="bold",
     )
 
-    # --- Courbe de taille ------------------------------------------------
-    dates = [point["date"] for point in timeline]
-    sizes = [point["size"] for point in timeline]
-    ax_size.plot(dates, sizes, color="#04ebf9", linewidth=1.4)
-    ax_size.set_ylim(0, max_size * 1.1)
-    ax_size.set_ylabel("signes", color="white", fontsize=9)
-    ax_size.tick_params(colors="white", labelsize=8)
-    for spine in ax_size.spines.values():
-        spine.set_color("#44505f")
-    size_cursor = ax_size.axvline(dates[0], color="white", linewidth=1, alpha=0.8)
-
-    fig.text(0.5, 0.985, title, color="#8fa3bf", fontsize=10, ha="center")
     header_date = fig.text(
-        0.5, 0.955, "", color="white", fontsize=22, fontweight="bold",
+        0.5, 0.96, "", color="white", fontsize=26, fontweight="bold",
         ha="center", va="top",
     )
     header_delta = fig.text(
-        0.5, 0.915, "", color="#cfd8e3", fontsize=12,
+        0.5, 0.905, "", color="#cfd8e3", fontsize=14,
         ha="center", va="top",
     )
 
@@ -490,14 +463,13 @@ def render(
         page_im.set_data(all_grids[commit_index])
 
         size_label.set_text(f"{point['size']:,}".replace(",", " ") + " signes")
-        size_cursor.set_xdata([point["date"], point["date"]])
 
         header_date.set_text(point["date"].strftime("%Y-%m-%d %H:%M"))
         header_delta.set_text(
             f"+{int(point['added'])} / -{int(point['removed'])} signes "
             f"(total ajouté {int(point['cum_added'])}, supprimé {int(point['cum_removed'])})"
         )
-        return page_im, size_label, size_cursor, header_date, header_delta
+        return page_im, size_label, header_date, header_delta
 
     anim = FuncAnimation(fig, update, frames=total_frames, interval=1000 / fps, blit=False)
 
@@ -548,7 +520,6 @@ def main() -> None:
         hold_frames=args.hold_frames,
         fps=args.fps,
         dpi=args.dpi,
-        title=file_path,
         columns=args.columns,
     )
     print(f"Animation écrite dans {output}")

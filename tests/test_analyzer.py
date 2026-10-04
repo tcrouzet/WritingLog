@@ -18,7 +18,7 @@ ANALYZER = ROOT / "scripts" / "analyze_vault.py"
 DATA_EXPORTER = ROOT / "scripts" / "export_data.py"
 WEB_BUILDER = ROOT / "scripts" / "web.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from analyze_vault import character_changes, classification_blocks, load_state, project_file_settings, tracked_file_settings
+from analyze_vault import added_block_is_internal, character_changes, classification_blocks, load_state, project_file_settings, tracked_file_settings
 from export_data import aggregate, interpolate_size_rows
 from fingerprint_index import FingerprintIndex
 
@@ -161,6 +161,11 @@ output_dir: site
             [row["timestamp"] for row in activity],
             ["2026-01-01T10:00:00+01:00", "2026-01-02T10:00:00+01:00"],
         )
+        project_activity = [
+            row for row in self.load("project_activity.json")
+            if row["projet"] == "Alpha"
+        ]
+        self.assertEqual(project_activity[0]["timestamp"], "2026-01-01T10:00:00+01:00")
 
         expected = {
             name: self.load(name)
@@ -171,6 +176,7 @@ output_dir: site
                 "file_monthly.json",
                 "file_size_evolution.json",
                 "file_activity.json",
+                "project_activity.json",
             )
         }
         state_before = self.load("state.json")
@@ -1000,6 +1006,45 @@ output_dir: site
             aggregate(state, {"Alpha": {}})
         self.assertIn("Avertissement : Alpha", error.getvalue())
 
+    def test_archive_aggregates_include_unfollowed_history_without_listing_projects(self) -> None:
+        state = {
+            "last_commit": "commit-2",
+            "project_sizes": {"Alpha": 1, "Archives/Rush": 0},
+            "events": [
+                {
+                    "timestamp": "2025-01-01T10:00:00+01:00",
+                    "interval_start": None,
+                    "commit": "commit-1",
+                    "project": "Alpha",
+                    "real_chars": 5,
+                    "edit_delta": 0,
+                    "folders": ["Alpha/manuscrit"],
+                },
+                {
+                    "timestamp": "2025-01-02T10:00:00+01:00",
+                    "interval_start": None,
+                    "commit": "commit-2",
+                    "project": "Archives/Rush",
+                    "real_chars": 7,
+                    "edit_delta": 0,
+                    "folders": ["Archives/Rush/manuscrit"],
+                },
+            ],
+            "size_points": [],
+        }
+
+        result = aggregate(state, {"Alpha": {}})
+
+        self.assertEqual(
+            [row["projet"] for row in result["project_activity"]],
+            ["Alpha", "Archives/Rush"],
+        )
+        self.assertEqual(
+            [row["projet"] for row in result["daily"]],
+            ["Alpha", "Archives/Rush"],
+        )
+        self.assertEqual([item["id"] for item in result["projects"]], ["Alpha"])
+
     def test_edited_move_reuses_index_and_keeps_new_delta_as_production(self) -> None:
         old_folder = self.vault / "Alpha" / "ancienne-version"
         old_folder.mkdir(parents=True)
@@ -1410,6 +1455,12 @@ output_dir: site
         self.assertEqual("".join(blocks), source)
         self.assertGreater(len(blocks), 1)
         self.assertLess(max(map(len, blocks)), len(source) // 2)
+
+    def test_partial_overlap_below_threshold_is_not_internal(self) -> None:
+        hashes = ["known", "new-1", "new-2", "new-3", "new-4"]
+        self.assertFalse(added_block_is_internal(hashes, {"known"}, 0.85))
+        self.assertFalse(added_block_is_internal(hashes, set(hashes[:4]), 0.85))
+        self.assertTrue(added_block_is_internal(hashes, set(hashes[:4]), 0.8))
 
     def test_one_word_correction_keeps_the_text_lineage(self) -> None:
         sources = self.vault / "Sources"

@@ -21,23 +21,23 @@ Il va lire tout seul :
   - `output_dir` dans config.yaml, pour écrire le résultat dans
     `<output_dir>/animations/<nom-du-fichier>.mp4`.
 
-Le document est reconstruit mot par mot, pas approximé par des bandes de
-couleur abstraites : chaque mot garde en mémoire le nombre de fois où il a
-été réécrit d'un commit à l'autre, et c'est ce compteur qui fixe sa couleur,
-façon dégradé Photoshop :
-  - jamais touché (texte neuf, où qu'il atterrisse) -> bleu clair
-  - réécrit une fois -> vert
-  - réécrit deux fois -> jaune
+Le document est reconstruit mot par mot, en vraies lettres (police à chasse
+fixe, dessinée avec Pillow), sur fond papier blanc — pas une mosaïque de
+blocs de couleur. Chaque mot garde en mémoire le nombre de fois où il a été
+réécrit d'un commit à l'autre, et c'est ce compteur qui fixe sa couleur :
+  - jamais touché (texte neuf, où qu'il atterrisse) -> noir
+  - réécrit une fois -> bleu
+  - réécrit deux fois -> fuchsia
   - réécrit trois fois ou plus -> rouge
 
-Format vidéo 16:9 (type YouTube) : juste la date, le +/- signes, et la page
-qui se remplit de haut en bas (comme on écrit), avec un vrai retour à la
-ligne et des paragraphes, pour respecter la forme réelle du texte plutôt
-qu'une simple barre étirée. Pas de nom de fichier affiché, pas de graphique
-de progression (sacrifié au profit du format vidéo).
+Format vidéo 16:9 (type YouTube) : la date, le +/- signes, et la page qui se
+remplit de haut en bas (comme on écrit), avec un vrai retour à la ligne et
+des paragraphes, pour respecter la forme réelle du texte. Pas de nom de
+fichier affiché, pas de graphique de progression (sacrifié au profit du
+format vidéo).
 
 Dépendances :
-    pip install matplotlib
+    pip install matplotlib pillow
 Export MP4 : nécessite ffmpeg installé et accessible dans le PATH.
 
 Si le fichier a été renommé ou déplacé pendant son histoire, le script suit
@@ -62,6 +62,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
+from PIL import Image, ImageDraw, ImageFont
 
 
 # ---------------------------------------------------------------------------
@@ -240,18 +241,18 @@ def file_content_at(repo: Path, commit: CommitRef) -> str:
 # à partir d'un diff isolé entre deux commits, on reconstruit le document
 # comme une vraie structure qui vit d'un commit à l'autre : chaque mot garde
 # la mémoire du nombre de fois où il a été réécrit. Un mot jamais touché
-# reste bleu (0 édition) ; à chaque réécriture il avance d'un cran vers le
-# vert (1), le jaune (2), le rouge (3 et plus). Un mot tout neuf démarre
-# toujours à 0, qu'il soit ajouté à la fin, au milieu, ou juste avant des
-# notes en vrac laissées en bas de page.
+# reste noir, comme une vraie page écrite (0 édition) ; à chaque réécriture
+# il avance d'un cran vers le bleu (1), le fuchsia (2), le rouge (3 et
+# plus). Un mot tout neuf démarre toujours à 0, qu'il soit ajouté à la fin,
+# au milieu, ou juste avant des notes en vrac laissées en bas de page.
 
 PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n+")
 WORD_RE = re.compile(r"\S+")
 PARAGRAPH_BREAK = "¶"
 
 # Couleur selon le nombre de fois où un mot a été réécrit : 0, 1, 2, 3+.
-EDIT_LEVEL_COLORS = ["#04ebf9", "#00e676", "#ffee58", "#ff1744"]
-BACKGROUND_RGB = (0.055, 0.067, 0.09)  # assorti au fond de la figure, pour l'espace "pas encore écrit"
+# Fond papier blanc, texte initial en noir, puis bleu -> fuchsia -> rouge.
+EDIT_LEVEL_COLORS = ["#111111", "#1455ff", "#d6189c", "#e3121b"]
 
 
 def tokenize_doc(text: str) -> list[str]:
@@ -354,46 +355,94 @@ def build_timeline(repo: Path, file_path: str, max_commits: int | None) -> list[
 # Mise en page : reconstituer la vraie forme du texte (mots, lignes, pages)
 # ---------------------------------------------------------------------------
 
-PAGE_COLUMNS = 120  # largeur de page, en caractères, pour le retour à la ligne (image au format plus large que haut)
+PAGE_COLUMNS = 100  # largeur de page, en caractères, pour le retour à la ligne
 
 
-def layout_rows(doc_state: list[dict[str, Any]], columns: int = PAGE_COLUMNS) -> list[list[str | None]]:
+def layout_rows(doc_state: list[dict[str, Any]], columns: int = PAGE_COLUMNS) -> list[list[tuple[int, str, str]]]:
     """Transforme la liste de mots en lignes de page (retour à la ligne
-    automatique, paragraphes séparés par une ligne vide), chaque case de la
-    ligne contenant soit la couleur du mot, soit None (espace/fond)."""
-    rows: list[list[str | None]] = []
-    current: list[str | None] = []
+    automatique, paragraphes séparés par une ligne vide). Chaque ligne est
+    une liste de (colonne de départ, mot, couleur) — on garde le vrai mot,
+    pas une couleur par caractère, pour pouvoir l'écrire en vraies lettres."""
+    rows: list[list[tuple[int, str, str]]] = []
+    current: list[tuple[int, str, str]] = []
+    cursor = 0
     for entry in doc_state:
         if entry["text"] == PARAGRAPH_BREAK:
             rows.append(current)
             rows.append([])
             current = []
+            cursor = 0
             continue
         word = entry["text"]
         color = EDIT_LEVEL_COLORS[min(entry["edits"], len(EDIT_LEVEL_COLORS) - 1)]
-        # Un espace réservé (1 caractère) entre deux mots sur la même ligne,
-        # mais coloré comme le mot qui suit plutôt que laissé en fond sombre :
-        # ça évite les points noirs parasites entre les mots tout en gardant
-        # une légère séparation visuelle.
         needed = len(word) + (1 if current else 0)
-        if len(current) + needed > columns:
+        if cursor + needed > columns:
             rows.append(current)
             current = []
+            cursor = 0
         if current:
-            current.append(color)
-        current.extend([color] * len(word))
+            cursor += 1  # espace avant le mot
+        current.append((cursor, word, color))
+        cursor += len(word)
     if current:
         rows.append(current)
     return rows
 
 
-def rows_to_grid(rows: list[list[str | None]], total_rows: int, columns: int = PAGE_COLUMNS) -> np.ndarray:
-    grid = np.tile(np.array(BACKGROUND_RGB), (total_rows, columns, 1))
-    for row_index, row in enumerate(rows[:total_rows]):
-        for col_index, color in enumerate(row[:columns]):
-            if color is not None:
-                grid[row_index, col_index] = matplotlib.colors.to_rgb(color)
-    return grid
+# ---------------------------------------------------------------------------
+# Rendu "vraies lettres" sur fond papier, via Pillow
+# ---------------------------------------------------------------------------
+
+PAPER_RGB = (255, 255, 255)
+
+
+def find_monospace_font() -> str:
+    from matplotlib import font_manager
+    return font_manager.findfont(font_manager.FontProperties(family="monospace"))
+
+
+def fit_monospace_font(font_path: str, target_char_width: float, size_hint: int = 40) -> "ImageFont.FreeTypeFont":
+    """Cherche la taille de police telle que la largeur d'un caractère
+    (police à chasse fixe) corresponde à `target_char_width` pixels."""
+    probe = ImageFont.truetype(font_path, size_hint)
+    probe_width = probe.getlength("M") or 1
+    size = max(6, int(size_hint * target_char_width / probe_width))
+    return ImageFont.truetype(font_path, size)
+
+
+def render_frame_image(
+    point: dict[str, Any],
+    rows: list[list[tuple[int, str, str]]],
+    frame_width: int,
+    frame_height: int,
+    margin_x: int,
+    text_top: int,
+    char_width: float,
+    row_height: float,
+    font: "ImageFont.FreeTypeFont",
+    header_font: "ImageFont.FreeTypeFont",
+    sub_font: "ImageFont.FreeTypeFont",
+) -> np.ndarray:
+    image = Image.new("RGB", (frame_width, frame_height), PAPER_RGB)
+    draw = ImageDraw.Draw(image)
+
+    date_text = point["date"].strftime("%Y-%m-%d %H:%M")
+    draw.text((frame_width / 2, 36), date_text, font=header_font, fill="#111111", anchor="ma")
+    delta_text = (
+        f"+{int(point['added'])} / -{int(point['removed'])} signes "
+        f"(total ajouté {int(point['cum_added'])}, supprimé {int(point['cum_removed'])})"
+    )
+    draw.text((frame_width / 2, 36 + header_font.size + 10), delta_text, font=sub_font, fill="#555555", anchor="ma")
+
+    for row_index, row in enumerate(rows):
+        y = text_top + row_index * row_height
+        if y > frame_height - 4:
+            break
+        for col_start, word, color in row:
+            x = margin_x + col_start * char_width
+            draw.text((x, y), word, font=font, fill=color)
+
+    return np.asarray(image)
 
 
 # ---------------------------------------------------------------------------
@@ -405,52 +454,49 @@ def render(
     output: Path,
     hold_frames: int,
     fps: int,
-    dpi: int,
     columns: int,
 ) -> None:
-    # On précalcule la mise en page (retour à la ligne) de chaque commit une
-    # bonne fois pour toutes, et la hauteur totale de page nécessaire pour
-    # contenir la version la plus longue : le bandeau grandit sur une échelle
-    # fixe, comme une vraie page qui se remplit.
+    # Format vidéo 16:9 (YouTube), en pixels, indépendant du nombre de
+    # lignes : plus le texte est long, plus chaque ligne est tassée (police
+    # plus petite), mais l'image elle-même garde toujours ce même format.
+    frame_width, frame_height = 1600, 900
+    margin_x = 90
+    text_top = 150
+
     all_rows = [layout_rows(point["doc_state"], columns) for point in timeline]
     total_rows = max((len(rows) for rows in all_rows), default=1) or 1
-    # Précalculé une bonne fois pour toutes : évite de refaire la mise en
-    # page à chaque image pendant les `hold_frames` images où un même commit
-    # reste affiché.
-    all_grids = [rows_to_grid(rows, total_rows, columns) for rows in all_rows]
 
-    # Format vidéo 16:9 (YouTube), indépendant du nombre de lignes : plus le
-    # texte est long, plus chaque ligne est tassée (rendue petite), mais
-    # l'image elle-même garde toujours ce même format.
-    fig = plt.figure(figsize=(16, 9), facecolor="#0e1117")
-    grid = fig.add_gridspec(1, 1, top=0.8, bottom=0.04, left=0.05, right=0.97)
-    ax_page = fig.add_subplot(grid[0])
-    ax_page.set_facecolor("#0e1117")
+    font_path = find_monospace_font()
+    available_w = frame_width - 2 * margin_x
+    available_h = frame_height - text_top - 40
+    char_width = available_w / columns
+    # Pas de plancher ici : on connaît la taille maximale (total_rows, sur
+    # la version la plus longue), donc on calcule la police pour que TOUT le
+    # texte rentre dans le cadre, même si ça doit être tout petit.
+    row_height = min(30.0, available_h / total_rows)
+    font = fit_monospace_font(font_path, char_width, size_hint=max(int(row_height), 4))
+    # La police à chasse fixe peut donner un caractère un peu plus étroit ou
+    # large que prévu selon sa taille entière la plus proche : on réajuste
+    # la largeur de colonne sur la vraie mesure de la police choisie.
+    char_width = font.getlength("M") or char_width
+    header_font = ImageFont.truetype(font_path, 34)
+    sub_font = ImageFont.truetype(font_path, 18)
 
-    # --- La page qui se remplit, mot par mot, de haut en bas --------------
-    ax_page.set_xlim(0, columns)
-    ax_page.set_ylim(total_rows, 0)  # ligne 0 = début du texte, en haut
-    ax_page.set_xticks([])
-    ax_page.set_yticks([])
-    for spine in ax_page.spines.values():
-        spine.set_color("#44505f")
-    page_image = np.tile(np.array(BACKGROUND_RGB), (total_rows, columns, 1))
-    page_im = ax_page.imshow(
-        page_image, extent=[0, columns, total_rows, 0], aspect="auto", interpolation="nearest",
-    )
-    size_label = ax_page.text(
-        0.5, 1.012, "", transform=ax_page.transAxes, ha="center", va="bottom",
-        color="white", fontsize=11, fontweight="bold",
-    )
+    # Précalculé une bonne fois pour toutes : évite de refaire le rendu à
+    # chaque image pendant les `hold_frames` images où un même commit reste
+    # affiché.
+    all_frames = [
+        render_frame_image(
+            point, rows, frame_width, frame_height, margin_x, text_top,
+            char_width, row_height, font, header_font, sub_font,
+        )
+        for point, rows in zip(timeline, all_rows)
+    ]
 
-    header_date = fig.text(
-        0.5, 0.96, "", color="white", fontsize=26, fontweight="bold",
-        ha="center", va="top",
-    )
-    header_delta = fig.text(
-        0.5, 0.905, "", color="#cfd8e3", fontsize=14,
-        ha="center", va="top",
-    )
+    fig = plt.figure(figsize=(frame_width / 100, frame_height / 100), facecolor="white")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis("off")
+    im = ax.imshow(all_frames[0])
 
     total_frames = len(timeline) * hold_frames
 
@@ -458,26 +504,16 @@ def render(
         return min(frame // hold_frames, len(timeline) - 1)
 
     def update(frame: int):
-        commit_index = frame_to_commit(frame)
-        point = timeline[commit_index]
-        page_im.set_data(all_grids[commit_index])
-
-        size_label.set_text(f"{point['size']:,}".replace(",", " ") + " signes")
-
-        header_date.set_text(point["date"].strftime("%Y-%m-%d %H:%M"))
-        header_delta.set_text(
-            f"+{int(point['added'])} / -{int(point['removed'])} signes "
-            f"(total ajouté {int(point['cum_added'])}, supprimé {int(point['cum_removed'])})"
-        )
-        return page_im, size_label, header_date, header_delta
+        im.set_data(all_frames[frame_to_commit(frame)])
+        return (im,)
 
     anim = FuncAnimation(fig, update, frames=total_frames, interval=1000 / fps, blit=False)
 
     output = Path(output)
     if output.suffix.lower() == ".gif":
-        anim.save(output, writer=PillowWriter(fps=fps), dpi=dpi)
+        anim.save(output, writer=PillowWriter(fps=fps), dpi=100)
     else:
-        anim.save(output, fps=fps, dpi=dpi)
+        anim.save(output, fps=fps, dpi=100)
     plt.close(fig)
 
 
@@ -497,7 +533,6 @@ def main() -> None:
     parser.add_argument("--output", default=None, type=Path, help="Forcer le fichier de sortie (.gif ou .mp4)")
     parser.add_argument("--hold-frames", type=int, default=12, help="Images tenues par commit (vitesse)")
     parser.add_argument("--fps", type=int, default=20, help="Images par seconde de la vidéo finale")
-    parser.add_argument("--dpi", type=int, default=120)
     parser.add_argument("--columns", type=int, default=PAGE_COLUMNS, help="Largeur de page en caractères (retour à la ligne)")
     parser.add_argument("--max-commits", type=int, default=None, help="Limiter aux N derniers commits touchant le fichier")
     args = parser.parse_args()
@@ -519,7 +554,6 @@ def main() -> None:
         output,
         hold_frames=args.hold_frames,
         fps=args.fps,
-        dpi=args.dpi,
         columns=args.columns,
     )
     print(f"Animation écrite dans {output}")

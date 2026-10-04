@@ -111,8 +111,6 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
     )
     events_by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for event in events:
-        if event["project"] not in active_projects:
-            continue
         if int(event.get("real_chars", 0)) <= 0 and int(event.get("edit_delta", 0)) >= 0:
             continue
         events_by_project[event["project"]].append(event)
@@ -220,7 +218,6 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
             state.get("size_points", []),
             key=lambda item: (item["timestamp"], item["commit"], item["project"]),
         )
-        if point["project"] in active_projects
     ]
     sizes = interpolate_size_rows(raw_sizes)
 
@@ -314,6 +311,18 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
         for event in state.get("tracked_file_events", [])
         if event["file"] in tracked_file_metadata
     ]
+    project_activity = [
+        {
+            "timestamp": event["timestamp"],
+            "commit": event["commit"],
+            "projet": event["project"],
+            "signes_reels": int(event.get("real_chars", 0)),
+            "signes_internes": int(event.get("internal_chars", 0)),
+            "signes_supprimes": max(0, -int(event.get("edit_delta", 0))),
+            "dossiers": event.get("folders", []),
+        }
+        for event in events
+    ]
 
     total_real = sum(project["signes_reels_total"] for project in projects)
     total_deleted = sum(project["signes_supprimes_total"] for project in projects)
@@ -357,6 +366,7 @@ def aggregate(state: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]
         "file_monthly": rollup_files("month"),
         "file_size_evolution": file_size_rows,
         "file_activity": file_activity,
+        "project_activity": project_activity,
         "duplications": duplications,
     }
 

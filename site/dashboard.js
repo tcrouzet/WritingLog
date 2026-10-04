@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const files = ["overview", "projects", "daily", "weekly", "monthly", "size_evolution", "files", "file_daily", "file_weekly", "file_monthly", "file_size_evolution", "file_activity"];
+  const files = ["overview", "projects", "daily", "weekly", "monthly", "size_evolution", "files", "file_daily", "file_weekly", "file_monthly", "file_size_evolution", "file_activity", "project_activity"];
   const charts = {};
   const palette = ["#1a73e8", "#34a853", "#fbbc04", "#ea4335", "#9334e6", "#00acc1", "#fa7b17", "#5f6368"];
   const colors = new Map();
@@ -16,8 +16,10 @@
   let productionGranularity = "day";
   let sizeGranularity = "day";
   let activityCellMinutes = 60;
+  let projectActivityGranularity = 60;
   const zooms = { daily: 1, size: 1 };
   const activityResolutions = [60, 30, 15];
+  const projectActivityResolutions = ["month", "week", "day", 60, 30, 15];
   const weekdayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const isDayBoundary = context => context.tick?.value !== undefined
     && Number(parisHourFormatter.format(new Date(context.tick.value))) === 0;
@@ -59,6 +61,24 @@
 
   function selectedFile() {
     return selectionKind() === "file" ? data.files.find(file => file.id === selectionId()) : null;
+  }
+
+  function activityResolutionsForSelection() {
+    if (selectionKind() === "file") return activityResolutions;
+    const rows = data.project_activity.filter(row => selectionKind() === "all" || row.projet === selectionId());
+    if (rows.length < 2) return projectActivityResolutions;
+    const spanDays = (Date.parse(rows.at(-1).timestamp) - Date.parse(rows[0].timestamp)) / 86400000;
+    if (spanDays > 180) return ["month", "week", "day"];
+    if (spanDays > 30) return ["week", "day"];
+    return projectActivityResolutions;
+  }
+
+  function defaultProjectActivityResolution() {
+    const rows = data.project_activity.filter(row => selectionKind() === "all" || row.projet === selectionId());
+    const spanDays = rows.length < 2
+      ? 0
+      : (Date.parse(rows.at(-1).timestamp) - Date.parse(rows[0].timestamp)) / 86400000;
+    return spanDays > 180 ? "month" : spanDays > 30 ? "week" : spanDays > 2 ? "day" : 60;
   }
 
   function productionRows(kind) {
@@ -223,9 +243,11 @@
   function productionChart(canvas, rows, kind) {
     const file = selectedFile();
     const visibleIds = new Set(file ? [file.id] : visibleProjects().map(project => project.id));
-    const visibleRows = rows.filter(row => visibleIds.has(row.projet));
+    const visibleRows = selectedProject === "all"
+      ? rows
+      : rows.filter(row => visibleIds.has(row.projet));
     const series = selectedProject === "all"
-      ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(visibleRows) }]
+      ? [{ id: "__all__", title: "Toute l’archive", rows: combinedProductionRows(visibleRows) }]
       : (file ? [file] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
@@ -285,7 +307,7 @@
   function weekdayChart(canvas) {
     const lastDay = latestDate().slice(0, 10);
     const series = selectedProject === "all"
-      ? [{ id: "__all__", title: "Tous les projets", rows: combinedProductionRows(data.daily) }]
+      ? [{ id: "__all__", title: "Toute l’archive", rows: combinedProductionRows(data.daily) }]
       : (selectedFile() ? [selectedFile()] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
@@ -318,6 +340,7 @@
       };
     });
     const options = commonOptions(true);
+    options.plugins.legend.display = false;
     options.plugins.tooltip.callbacks = {
       title: items => items[0].raw.x,
       label: context => `${context.dataset.label} : ${formatter.format(context.raw.total)} signes`,
@@ -501,6 +524,251 @@
     }
   }
 
+  function projectActivityGrid(svg) {
+    const rows = data.project_activity
+      .filter(row => selectionKind() === "all" || row.projet === selectionId())
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+    svg.replaceChildren();
+    const detail = document.querySelector("#file-activity-detail");
+    detail.hidden = true;
+    detail.textContent = "";
+    if (!rows.length) {
+      svg.setAttribute("width", "1");
+      svg.setAttribute("height", "1");
+      svg.setAttribute("viewBox", "0 0 1 1");
+      document.querySelector("#file-activity-stage").style.width = "1px";
+      return;
+    }
+
+    const granularity = projectActivityGranularity;
+    const stepMs = typeof granularity === "number" ? granularity * 60000 : 0;
+    const parisParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    });
+    const localParts = timestamp => Object.fromEntries(
+      parisParts.formatToParts(new Date(timestamp)).map(part => [part.type, part.value])
+    );
+    const bins = [];
+    if (stepMs) {
+      const firstStep = Math.floor(Date.parse(rows[0].timestamp) / stepMs);
+      const lastStep = Math.floor(Date.parse(rows.at(-1).timestamp) / stepMs);
+      for (let step = firstStep; step <= lastStep; step += 1) {
+        const start = step * stepMs;
+        const parts = localParts(start);
+        bins.push({
+          key: String(step), start,
+          date: `${parts.year}-${parts.month}-${parts.day}`,
+          month: `${parts.year}-${parts.month}`
+        });
+      }
+    } else {
+      const first = new Date(`${rows[0].timestamp.slice(0, granularity === "month" ? 7 : 10)}${granularity === "month" ? "-01" : ""}T12:00:00Z`);
+      const last = new Date(`${rows.at(-1).timestamp.slice(0, granularity === "month" ? 7 : 10)}${granularity === "month" ? "-01" : ""}T12:00:00Z`);
+      if (granularity === "week") {
+        first.setUTCDate(first.getUTCDate() - ((first.getUTCDay() + 6) % 7));
+        last.setUTCDate(last.getUTCDate() - ((last.getUTCDay() + 6) % 7));
+      }
+      for (const cursor = first; cursor <= last;) {
+        const date = cursor.toISOString().slice(0, 10);
+        bins.push({
+          key: granularity === "month" ? date.slice(0, 7) : granularity === "week" ? isoWeek(date) : date,
+          date,
+          month: date.slice(0, 7)
+        });
+        if (granularity === "month") cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+        else cursor.setUTCDate(cursor.getUTCDate() + (granularity === "week" ? 7 : 1));
+      }
+    }
+    const buckets = new Map();
+    for (const row of rows) {
+      const date = row.timestamp.slice(0, 10);
+      const key = stepMs
+        ? String(Math.floor(Date.parse(row.timestamp) / stepMs))
+        : granularity === "month" ? date.slice(0, 7) : granularity === "week" ? isoWeek(date) : date;
+      const bucket = buckets.get(key) || { real: 0, internal: 0, removed: 0, folders: new Set() };
+      bucket.real += Number(row.signes_reels) || 0;
+      bucket.internal += Number(row.signes_internes) || 0;
+      bucket.removed += Number(row.signes_supprimes) || 0;
+      for (const folder of row.dossiers || []) bucket.folders.add(folder);
+      buckets.set(key, bucket);
+    }
+    const targetRatio = 5 / 3;
+    let shape = { columns: 5, rows: 3, capacity: 15 };
+    let bestScore = Infinity;
+    for (let gridRows = 3; gridRows <= Math.max(3, Math.ceil(Math.sqrt(bins.length)) + 3); gridRows += 1) {
+      const columns = Math.max(5, Math.ceil(bins.length / gridRows));
+      const capacity = columns * gridRows;
+      const score = Math.abs(Math.log((columns / gridRows) / targetRatio))
+        + ((capacity - bins.length) / bins.length) * 0.05;
+      if (score < bestScore) {
+        bestScore = score;
+        shape = { columns, rows: gridRows, capacity };
+      }
+    }
+    const cellSize = Math.max(10, 320 / shape.columns);
+    const gridWidth = shape.columns * cellSize;
+    const gridHeight = shape.rows * cellSize;
+    const months = [];
+    const firstMonth = new Date(`${bins[0].date.slice(0, 7)}-01T12:00:00Z`);
+    const lastMonth = new Date(`${bins.at(-1).date.slice(0, 7)}-01T12:00:00Z`);
+    const showYears = firstMonth.getUTCFullYear() !== lastMonth.getUTCFullYear();
+    if (showYears) {
+      const ranges = new Map();
+      bins.forEach((bin, index) => {
+        const year = bin.date.slice(0, 4);
+        const range = ranges.get(year) || { first: index, last: index };
+        range.last = index;
+        ranges.set(year, range);
+      });
+      for (const [year, range] of ranges) {
+        const firstColumn = Math.floor(range.first / shape.rows);
+        const lastColumn = Math.floor(range.last / shape.rows);
+        months.push({
+          x: (firstColumn + lastColumn + 1) * cellSize / 2,
+          availableWidth: (lastColumn - firstColumn + 1) * cellSize,
+          label: year
+        });
+      }
+    } else {
+      let monthBinIndex = 0;
+      for (const cursor = new Date(firstMonth); cursor <= lastMonth; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+        const monthKey = cursor.toISOString().slice(0, 7);
+        while (monthBinIndex < bins.length && bins[monthBinIndex].date.slice(0, 7) < monthKey) monthBinIndex += 1;
+        if (monthBinIndex === bins.length) break;
+        const label = new Intl.DateTimeFormat("fr-FR", {
+          month: "short", timeZone: "UTC"
+        }).format(cursor);
+        months.push({ x: (Math.floor(monthBinIndex / shape.rows) + 0.5) * cellSize, label });
+      }
+    }
+    const width = gridWidth;
+    const gridOffsetX = 0;
+    const height = gridHeight + 16 + 4;
+    const maximum = [...buckets.values()].reduce(
+      (value, bucket) => Math.max(value, bucket.real + bucket.internal + bucket.removed),
+      1
+    );
+    const namespace = "http://www.w3.org/2000/svg";
+    const stage = document.querySelector("#file-activity-stage");
+    stage.style.width = `${width}px`;
+    stage.style.height = "";
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("shape-rendering", "crispEdges");
+
+    const cellNodes = document.createDocumentFragment();
+    for (let index = 0; index < shape.capacity; index += 1) {
+      const bin = bins[index];
+      const bucket = bin ? buckets.get(bin.key) : null;
+      const amount = bucket ? bucket.real + bucket.internal + bucket.removed : 0;
+      const rectangle = document.createElementNS(namespace, "rect");
+      rectangle.setAttribute("x", String(gridOffsetX + Math.floor(index / shape.rows) * cellSize));
+      rectangle.setAttribute("y", String((index % shape.rows) * cellSize));
+      rectangle.setAttribute("width", String(cellSize));
+      rectangle.setAttribute("height", String(cellSize));
+      const fill = amount ? `rgb(26 115 232 / ${0.22 + 0.78 * Math.sqrt(amount / maximum)})` : "#fff";
+      rectangle.setAttribute("fill", fill);
+      rectangle.setAttribute("data-fill", fill);
+      rectangle.setAttribute("stroke", "#dadce0");
+      if (!bin) {
+        rectangle.setAttribute("aria-hidden", "true");
+        cellNodes.append(rectangle);
+        continue;
+      }
+      rectangle.setAttribute("class", "activity-cell");
+      rectangle.setAttribute("tabindex", "0");
+      const date = new Date(stepMs ? bin.start : `${bin.date}T12:00:00Z`);
+      const dateLabel = granularity === "month"
+        ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(date)
+        : granularity === "week"
+          ? `Semaine ${bin.key.slice(-2)}, ${bin.key.slice(0, 4)}`
+          : new Intl.DateTimeFormat("fr-FR", {
+              dateStyle: "full", timeZone: stepMs ? "Europe/Paris" : "UTC"
+            }).format(date);
+      const heading = stepMs
+        ? `${dateLabel}, ${new Intl.DateTimeFormat("fr-FR", {
+            timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+          }).format(date)}–${new Intl.DateTimeFormat("fr-FR", {
+            timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+          }).format(new Date(bin.start + stepMs))}`
+        : granularity === "month"
+          ? dateLabel
+          : granularity === "week"
+          ? `${dateLabel} (${new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", timeZone: "UTC" }).format(date)}–${new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(date.getTime() + 6 * 86400000))})`
+          : dateLabel;
+      const text = [
+        heading,
+        `Signes nouveaux : ${formatter.format(bucket?.real || 0)}`,
+        `Signes déjà présents ou déplacés : ${formatter.format(bucket?.internal || 0)}`,
+        `Signes retirés : ${formatter.format(bucket?.removed || 0)}`,
+        `Dossiers analysés : ${bucket ? [...bucket.folders].sort().join(", ") || "—" : "—"}`
+      ].join("\n");
+      const tooltip = document.createElementNS(namespace, "title");
+      tooltip.textContent = text;
+      rectangle.append(tooltip);
+      rectangle.setAttribute("aria-label", text);
+      rectangle.addEventListener("click", () => {
+        svg.querySelectorAll(".activity-cell.is-selected").forEach(cell => {
+          cell.classList.remove("is-selected");
+          cell.setAttribute("fill", cell.dataset.fill);
+        });
+        rectangle.classList.add("is-selected");
+        rectangle.setAttribute("fill", "#d93025");
+        detail.textContent = text;
+        detail.hidden = false;
+      });
+      rectangle.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        rectangle.dispatchEvent(new MouseEvent("click"));
+      });
+      cellNodes.append(rectangle);
+    }
+    svg.append(cellNodes);
+    if (showYears) {
+      for (let index = 0; index < bins.length; index += 1) {
+        const column = Math.floor(index / shape.rows);
+        const row = index % shape.rows;
+        const year = bins[index].date.slice(0, 4);
+        const boundaries = [];
+        const below = bins[index + 1];
+        if (row + 1 < shape.rows && below && below.date.slice(0, 4) !== year) {
+          boundaries.push([column * cellSize + 1, (row + 1) * cellSize, (column + 1) * cellSize - 1, (row + 1) * cellSize]);
+        }
+        const right = bins[index + shape.rows];
+        if (column + 1 < shape.columns && right && right.date.slice(0, 4) !== year) {
+          boundaries.push([(column + 1) * cellSize, row * cellSize + 1, (column + 1) * cellSize, (row + 1) * cellSize - 1]);
+        }
+        for (const [x1, y1, x2, y2] of boundaries) {
+          const boundary = document.createElementNS(namespace, "line");
+          boundary.setAttribute("x1", String(x1));
+          boundary.setAttribute("x2", String(x2));
+          boundary.setAttribute("y1", String(y1));
+          boundary.setAttribute("y2", String(y2));
+          boundary.setAttribute("stroke", "#bdc1c6");
+          boundary.setAttribute("stroke-width", "2");
+          boundary.setAttribute("pointer-events", "none");
+          svg.append(boundary);
+        }
+      }
+    }
+    for (const month of months) {
+      const x = month.x;
+      const labelWidth = month.label.length * 5;
+      if (showYears && labelWidth > month.availableWidth) continue;
+      const label = document.createElementNS(namespace, "text");
+      label.setAttribute("x", String(x));
+      label.setAttribute("y", String(gridHeight + 12));
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("fill", "#5f6368");
+      label.setAttribute("font-size", "8");
+      label.textContent = month.label;
+      svg.append(label);
+    }
+  }
+
   function filteredDaily() {
     return productionRows("day").filter(row => selectedProject === "all" || row.projet === selectionId());
   }
@@ -560,17 +828,31 @@
 
   function savePreferences() {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, productionGranularity, sizeGranularity, activityCellMinutes, zooms }));
+      localStorage.setItem(storageKey, JSON.stringify({ project: selectedProject, productionGranularity, sizeGranularity, activityCellMinutes, projectActivityGranularity, zooms }));
     } catch (_) { /* Le dashboard reste utilisable si le stockage est désactivé. */ }
   }
 
   function updateActivityResolutionControls() {
-    document.querySelector("#activity-resolution").textContent = activityCellMinutes === 60 ? "1 h" : `${activityCellMinutes} min`;
-    const current = activityResolutions.indexOf(activityCellMinutes);
+    const isFile = selectionKind() === "file";
+    const resolutions = activityResolutionsForSelection();
+    let value = isFile ? activityCellMinutes : projectActivityGranularity;
+    if (!isFile && !resolutions.includes(value)) {
+      value = defaultProjectActivityResolution();
+      projectActivityGranularity = value;
+      savePreferences();
+    }
+    document.querySelector("#activity-resolution").textContent = typeof value === "number"
+      ? value === 60 ? "1 h" : `${value} min`
+      : value === "month" ? "mois" : value === "day" ? "jour" : "semaine";
+    const current = resolutions.indexOf(value);
     document.querySelectorAll("[data-activity-resolution]").forEach(button => {
+      const direction = button.dataset.activityResolution;
       button.disabled = button.dataset.activityResolution === "out"
         ? current === 0
-        : current === activityResolutions.length - 1;
+        : current === resolutions.length - 1;
+      const label = direction === "out" ? "Afficher une période plus longue" : "Afficher une période plus courte";
+      button.setAttribute("aria-label", label);
+      button.title = label;
     });
   }
 
@@ -650,11 +932,15 @@
     });
     document.querySelectorAll("[data-activity-resolution]").forEach(button => {
       button.addEventListener("click", () => {
-        const current = activityResolutions.indexOf(activityCellMinutes);
+        const isFile = selectionKind() === "file";
+        const resolutions = activityResolutionsForSelection();
+        const currentValue = isFile ? activityCellMinutes : projectActivityGranularity;
+        const current = resolutions.indexOf(currentValue);
         const offset = button.dataset.activityResolution === "in" ? 1 : -1;
-        const next = Math.max(0, Math.min(activityResolutions.length - 1, current + offset));
+        const next = Math.max(0, Math.min(resolutions.length - 1, current + offset));
         if (next === current) return;
-        activityCellMinutes = activityResolutions[next];
+        if (isFile) activityCellMinutes = resolutions[next];
+        else projectActivityGranularity = resolutions[next];
         savePreferences();
         updateActivityResolutionControls();
         render();
@@ -715,7 +1001,7 @@
     const chart = Chart.getChart(canvas);
     if (!chart) return;
     const heading = canvas.closest(".panel")?.querySelector("h2")?.textContent || "graphique";
-    const project = selectedProject === "all" ? "tous-les-projets" : title(selectedProject);
+    const project = selectedProject === "all" ? "toute-larchive" : title(selectedProject);
     const filename = `${safeFilename(project)}-${safeFilename(heading)}`;
     if (format === "png") {
       const png = chartPng(canvas);
@@ -731,7 +1017,7 @@
 
   function exportSvg(svg, format) {
     const heading = svg.closest(".panel")?.querySelector("h2")?.textContent || "graphique";
-    const project = selectedProject === "all" ? "tous-les-projets" : title(selectedProject);
+    const project = selectedProject === "all" ? "toute-larchive" : title(selectedProject);
     const filename = `${safeFilename(project)}-${safeFilename(heading)}`;
     const exportVisual = svg.id === "file-activity-chart" ? activityExportSvg(svg) : svg;
     const width = Number(exportVisual.getAttribute("width"));
@@ -875,12 +1161,16 @@
   function sizeRows(granularity) {
     const result = [];
     const file = selectedFile();
-    const entities = file ? [file] : visibleProjects();
     const source = file
       ? data.file_size_evolution
           .filter(row => !row.estime && row.modifie)
           .map(row => ({ ...row, projet: row.fichier }))
       : data.size_evolution;
+    const entities = file
+      ? [file]
+      : selectedProject === "all"
+        ? [...new Set(source.map(row => row.projet))].map(id => ({ id }))
+        : visibleProjects();
     for (const project of entities) {
       const rows = source.filter(row => row.projet === project.id).sort((a, b) => a.date.localeCompare(b.date));
       const buckets = new Map();
@@ -952,18 +1242,17 @@
       savePreferences();
     }
     renderCards(filteredDaily());
-    const activityPanel = document.querySelector("#file-activity-panel");
-    activityPanel.hidden = selectionKind() !== "file";
-    if (!activityPanel.hidden) {
-      updateActivityResolutionControls();
-      fileActivityGrid(document.querySelector("#file-activity-chart"));
-    }
+    document.querySelector("#file-activity-panel").hidden = false;
+    updateActivityResolutionControls();
+    const activitySvg = document.querySelector("#file-activity-chart");
+    if (selectionKind() === "file") fileActivityGrid(activitySvg);
+    else projectActivityGrid(activitySvg);
     const productionData = productionRows(productionGranularity);
     charts.daily = productionChart(document.querySelector("#daily-chart"), productionData, productionGranularity);
     charts.weekday = weekdayChart(document.querySelector("#weekday-chart"));
     const projectSizes = sizeRows(sizeGranularity);
     const sizeSeries = selectedProject === "all"
-      ? [{ id: "__all__", title: "Tous les projets", rows: combinedSizeRows(projectSizes, sizeGranularity) }]
+      ? [{ id: "__all__", title: "Toute l’archive", rows: combinedSizeRows(projectSizes, sizeGranularity) }]
       : (selectedFile() ? [selectedFile()] : visibleProjects()).map(project => ({
           id: project.id,
           title: project.title,
@@ -1061,6 +1350,7 @@
         if (["minute", "hour", "day", "week", "month"].includes(saved?.productionGranularity)) productionGranularity = saved.productionGranularity;
         if (["minute", "hour", "day", "week", "month", "year"].includes(saved?.sizeGranularity)) sizeGranularity = saved.sizeGranularity;
         if (activityResolutions.includes(saved?.activityCellMinutes)) activityCellMinutes = saved.activityCellMinutes;
+        if (projectActivityResolutions.includes(saved?.projectActivityGranularity)) projectActivityGranularity = saved.projectActivityGranularity;
         if (saved?.zooms) {
           for (const key of Object.keys(zooms)) {
             if (zoomLevels.includes(saved.zooms[key])) zooms[key] = saved.zooms[key];

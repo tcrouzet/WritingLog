@@ -6,7 +6,7 @@
       "Zone/manuscrit"
     ],
     "id": "Isa",
-    "signes_reels_total": 485993,
+    "signes_reels_total": 702019,
     "signes_supprimes_total": 203229,
     "taille_actuelle": 411443,
     "date_creation": "2025-08-02T10:38:31+02:00",
@@ -38,7 +38,7 @@
       "RR/Manuscrit"
     ],
     "id": "Rush",
-    "signes_reels_total": 158939,
+    "signes_reels_total": 238783,
     "signes_supprimes_total": 369682,
     "taille_actuelle": 391832,
     "date_creation": "2024-06-29T21:10:01+02:00",
@@ -47,7 +47,7 @@
   {
     "id": "iT",
     "title": "iT",
-    "signes_reels_total": 469613,
+    "signes_reels_total": 580412,
     "signes_supprimes_total": 139352,
     "taille_actuelle": 679808,
     "date_creation": "2025-12-07T11:18:24+01:00",
@@ -56,10 +56,10 @@
   {
     "id": "tcrouzet",
     "title": "tcrouzet",
-    "signes_reels_total": 3055359,
-    "signes_supprimes_total": 1502165,
-    "taille_actuelle": 15902042,
+    "signes_reels_total": 3531414,
+    "signes_supprimes_total": 1507545,
+    "taille_actuelle": 15908927,
     "date_creation": "2024-04-18T19:09:38+02:00",
-    "derniere_activite": "2026-10-03T06:21:57+02:00"
+    "derniere_activite": "2026-10-04T10:17:27+02:00"
   }
 ]

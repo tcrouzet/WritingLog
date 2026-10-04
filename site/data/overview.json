@@ -1,9 +1,9 @@
 {
-  "signes_reels_total": 4169994,
-  "signes_supprimes_total": 2214428,
+  "signes_reels_total": 5052718,
+  "signes_supprimes_total": 2219808,
   "nombre_projets": 6,
   "projet_plus_actif_30_jours": "Isa",
   "projet_plus_actif_30_jours_titre": "L'expérience humaine",
-  "derniere_mise_a_jour": "2026-10-03T16:58:14+02:00",
-  "dernier_commit": "12134e164d9d6436bf55eb78d54c1c3de37e2925"
+  "derniere_mise_a_jour": "2026-10-04T10:40:15+02:00",
+  "dernier_commit": "a2911b0373b54fa62d53332a9274d2dfec0f515e"
 }

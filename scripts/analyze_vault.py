@@ -365,9 +365,10 @@ def whole_file_is_internal(
 
 
 def added_block_is_internal(
-    hashes: list[str], known_hashes: set[str], force: bool = False
+    hashes: list[str], known_hashes: set[str], threshold: float, force: bool = False
 ) -> bool:
-    return bool(hashes and (any(value in known_hashes for value in hashes) or force))
+    ratio = sum(value in known_hashes for value in hashes) / len(hashes) if hashes else 0.0
+    return bool(hashes and (ratio >= threshold or force))
 
 
 def infer_edited_renames(
@@ -1044,6 +1045,12 @@ def process_history_diff(
                     if change.status == "A" and new_text
                     else None
                 )
+                whole_removed_hashes = (
+                    winnowed_hashes(old_text, gram_chars, selection_chars)
+                    if change.status == "D" and old_text
+                    and any(candidate.status == "A" for candidate in commit_changes)
+                    else []
+                )
                 for _, block_hashes in added_blocks:
                     commit_local_hashes.update(block_hashes)
                     commit_added_hashes.extend(block_hashes)
@@ -1061,7 +1068,27 @@ def process_history_diff(
                     "added_blocks": added_blocks,
                     "removed_blocks": removed_blocks,
                     "whole_added_block": whole_added_block,
+                    "whole_removed_hashes": whole_removed_hashes,
                 })
+
+            removed_file_hashes = [
+                set(prepared["whole_removed_hashes"])
+                for prepared in prepared_changes
+                if prepared["whole_removed_hashes"]
+            ]
+            for prepared in prepared_changes:
+                whole_added = prepared["whole_added_block"]
+                if not whole_added or not removed_file_hashes:
+                    continue
+                added_hashes = whole_added[1]
+                if not added_hashes:
+                    continue
+                if any(
+                    sum(value in source_hashes for value in added_hashes) / len(added_hashes)
+                    >= overlap_threshold
+                    for source_hashes in removed_file_hashes
+                ):
+                    prepared["same_commit_source_internal"] = True
 
             # Seconde passe : toute la logique métier réutilise exclusivement
             # les textes, diffs et hashes préparés ci-dessus.
@@ -1231,6 +1258,9 @@ def process_history_diff(
                     "index_project": fallback_project(new_path or old_path, new_project or old_project),
                     "added_blocks": added_blocks,
                     "whole_added_block": whole_added_block,
+                    "same_commit_source_internal": prepared.get(
+                        "same_commit_source_internal", False
+                    ),
                     "reappeared_file": reappeared_file,
                     "removed_blocks": removed_blocks,
                     "novel_chars": 0,
@@ -1443,7 +1473,10 @@ def process_history_diff(
                         repeated_compilation = (
                             record["reappeared_file"] and whole_ratio >= 0.5
                         )
-                        if whole_file_is_internal(
+                        if record.get("same_commit_source_internal"):
+                            blocks_to_classify = [whole_added]
+                            record["force_whole_internal"] = True
+                        elif whole_file_is_internal(
                             whole_hashes,
                             commit_known_hashes,
                             overlap_threshold,
@@ -1456,13 +1489,11 @@ def process_history_diff(
                     for part, block_hashes in blocks_to_classify:
                         matched = sum(1 for value in block_hashes if value in commit_known_hashes)
                         ratio = matched / len(block_hashes) if block_hashes else 0.0
-                        # À cette granularité courte, une seule empreinte exacte
-                        # de 36 caractères suffit à conserver la filiation. Un
-                        # seuil de 85 % recréditerait tout un groupe de phrases
-                        # dès que quelques mots ont été corrigés.
+                        # Un recouvrement partiel ne doit pas masquer tout le bloc.
                         if added_block_is_internal(
                             block_hashes,
                             commit_known_hashes,
+                            overlap_threshold,
                             record.get("force_whole_internal", False),
                         ):
                             if new_project:
@@ -1861,7 +1892,7 @@ def process_tracked_files(
                             blocks = [(new_text, whole_hashes)]
                             known = whole_known
                     for part, block_hashes in blocks:
-                        if added_block_is_internal(block_hashes, known):
+                        if added_block_is_internal(block_hashes, known, overlap_threshold):
                             commit_events[file_id]["internal_chars"] += len(part)
                         else:
                             commit_events[file_id]["real_chars"] += len(part)
