@@ -250,9 +250,11 @@ PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n+")
 WORD_RE = re.compile(r"\S+")
 PARAGRAPH_BREAK = "¶"
 
-# Couleur selon le nombre de fois où un mot a été réécrit : 0, 1, 2, 3+.
-# Fond papier blanc, texte initial en noir, puis bleu -> fuchsia -> rouge.
-EDIT_LEVEL_COLORS = ["#111111", "#1455ff", "#d6189c", "#e3121b"]
+# Surlignage façon stabilo selon le nombre de fois où un mot a été réécrit :
+# 0 fois -> pas de surlignage (texte noir simple), 1 -> jaune, 2 -> vert,
+# 3 et plus -> rouge. Le texte lui-même reste toujours noir, bien plus
+# visible qu'un texte coloré sur fond blanc.
+HIGHLIGHT_COLORS = [None, "#ffe066", "#63e6be", "#ff8787"]
 
 
 def tokenize_doc(text: str) -> list[str]:
@@ -355,35 +357,82 @@ def build_timeline(repo: Path, file_path: str, max_commits: int | None) -> list[
 # Mise en page : reconstituer la vraie forme du texte (mots, lignes, pages)
 # ---------------------------------------------------------------------------
 
-PAGE_COLUMNS = 100  # largeur de page, en caractères, pour le retour à la ligne
-
-
-def layout_rows(doc_state: list[dict[str, Any]], columns: int = PAGE_COLUMNS) -> list[list[tuple[int, str, str]]]:
+def layout_rows(
+    doc_state: list[dict[str, Any]],
+    font: "ImageFont.FreeTypeFont",
+    column_width_px: float,
+) -> list[list[tuple[float, str, str | None]]]:
     """Transforme la liste de mots en lignes de page (retour à la ligne
     automatique, paragraphes séparés par une ligne vide). Chaque ligne est
-    une liste de (colonne de départ, mot, couleur) — on garde le vrai mot,
-    pas une couleur par caractère, pour pouvoir l'écrire en vraies lettres."""
-    rows: list[list[tuple[int, str, str]]] = []
-    current: list[tuple[int, str, str]] = []
-    cursor = 0
+    une liste de (x en pixels depuis le début de colonne, mot, couleur de
+    surlignage ou None).
+
+    Important : le retour à la ligne se calcule avec la largeur RÉELLE en
+    pixels de chaque mot (`font.getlength`), pas en comptant les
+    caractères. Un simple compte de caractères suppose que tous les
+    glyphes font exactement la même largeur que "M" ; or des caractères
+    français (accents, « », —, ’, …) peuvent être rendus avec une police
+    de secours légèrement différente, ce qui décale le calcul et fait
+    déborder certains mots sur la colonne voisine.
+
+    Cas particulier géré explicitement : un "mot" (au sens de WORD_RE, donc
+    sans espace) peut très bien être plus large à lui seul que la colonne
+    entière — un lien markdown collé `[texte](http://...)`, une très longue
+    URL, un mot à rallonge avec tirets. Dans ce cas on le découpe lettre par
+    lettre (toujours en largeur réelle en pixels) pour qu'il ne déborde
+    jamais, même posé en tout début de ligne."""
+    rows: list[list[tuple[float, str, str | None]]] = []
+    current: list[tuple[float, str, str | None]] = []
+    cursor_px = 0.0
+    space_w = font.getlength(" ") or (font.size * 0.5)
+
+    def split_oversized(token: str) -> list[str]:
+        pieces: list[str] = []
+        piece = ""
+        for ch in token:
+            candidate = piece + ch
+            if piece and font.getlength(candidate) > column_width_px:
+                pieces.append(piece)
+                piece = ch
+            else:
+                piece = candidate
+        if piece:
+            pieces.append(piece)
+        return pieces
+
+    def place(token: str, highlight: str | None, force_break_after: bool) -> None:
+        nonlocal current, cursor_px
+        token_w = font.getlength(token)
+        needed = token_w + (space_w if current else 0.0)
+        if current and cursor_px + needed > column_width_px:
+            rows.append(current)
+            current = []
+            cursor_px = 0.0
+        if current:
+            cursor_px += space_w  # espace avant le mot
+        current.append((cursor_px, token, highlight))
+        cursor_px += token_w
+        if force_break_after:
+            rows.append(current)
+            current = []
+            cursor_px = 0.0
+
     for entry in doc_state:
         if entry["text"] == PARAGRAPH_BREAK:
             rows.append(current)
             rows.append([])
             current = []
-            cursor = 0
+            cursor_px = 0.0
             continue
         word = entry["text"]
-        color = EDIT_LEVEL_COLORS[min(entry["edits"], len(EDIT_LEVEL_COLORS) - 1)]
-        needed = len(word) + (1 if current else 0)
-        if cursor + needed > columns:
-            rows.append(current)
-            current = []
-            cursor = 0
-        if current:
-            cursor += 1  # espace avant le mot
-        current.append((cursor, word, color))
-        cursor += len(word)
+        highlight = HIGHLIGHT_COLORS[min(entry["edits"], len(HIGHLIGHT_COLORS) - 1)]
+        word_w = font.getlength(word)
+        if word_w > column_width_px:
+            pieces = split_oversized(word)
+            for index, piece in enumerate(pieces):
+                place(piece, highlight, force_break_after=index < len(pieces) - 1)
+        else:
+            place(word, highlight, force_break_after=False)
     if current:
         rows.append(current)
     return rows
@@ -412,16 +461,19 @@ def fit_monospace_font(font_path: str, target_char_width: float, size_hint: int 
 
 def render_frame_image(
     point: dict[str, Any],
-    rows: list[list[tuple[int, str, str]]],
+    rows: list[list[tuple[float, str, str | None]]],
     frame_width: int,
     frame_height: int,
     margin_x: int,
     text_top: int,
-    char_width: float,
     row_height: float,
     font: "ImageFont.FreeTypeFont",
     header_font: "ImageFont.FreeTypeFont",
     sub_font: "ImageFont.FreeTypeFont",
+    physical_columns: int,
+    column_width_px: float,
+    column_gap_px: float,
+    rows_per_column: int,
 ) -> np.ndarray:
     image = Image.new("RGB", (frame_width, frame_height), PAPER_RGB)
     draw = ImageDraw.Draw(image)
@@ -435,12 +487,21 @@ def render_frame_image(
     draw.text((frame_width / 2, 36 + header_font.size + 10), delta_text, font=sub_font, fill="#555555", anchor="ma")
 
     for row_index, row in enumerate(rows):
-        y = text_top + row_index * row_height
-        if y > frame_height - 4:
-            break
-        for col_start, word, color in row:
-            x = margin_x + col_start * char_width
-            draw.text((x, y), word, font=font, fill=color)
+        column = row_index // rows_per_column
+        if column >= physical_columns:
+            break  # texte plus long que l'espace total des 3 colonnes (ne devrait pas arriver)
+        row_in_column = row_index % rows_per_column
+        column_x = margin_x + column * (column_width_px + column_gap_px)
+        y = text_top + row_in_column * row_height
+        for col_start_px, word, highlight in row:
+            x = column_x + col_start_px
+            if highlight:
+                word_w = font.getlength(word)
+                draw.rectangle(
+                    [x - 1, y + row_height * 0.08, x + word_w + 1, y + row_height * 0.92],
+                    fill=highlight,
+                )
+            draw.text((x, y), word, font=font, fill="#111111")
 
     return np.asarray(image)
 
@@ -454,7 +515,6 @@ def render(
     output: Path,
     hold_frames: int,
     fps: int,
-    columns: int,
 ) -> None:
     # Format vidéo 16:9 (YouTube), en pixels, indépendant du nombre de
     # lignes : plus le texte est long, plus chaque ligne est tassée (police
@@ -463,22 +523,49 @@ def render(
     margin_x = 90
     text_top = 150
 
-    all_rows = [layout_rows(point["doc_state"], columns) for point in timeline]
-    total_rows = max((len(rows) for rows in all_rows), default=1) or 1
-
     font_path = find_monospace_font()
     available_w = frame_width - 2 * margin_x
     available_h = frame_height - text_top - 40
-    char_width = available_w / columns
-    # Pas de plancher ici : on connaît la taille maximale (total_rows, sur
-    # la version la plus longue), donc on calcule la police pour que TOUT le
-    # texte rentre dans le cadre, même si ça doit être tout petit.
-    row_height = min(30.0, available_h / total_rows)
-    font = fit_monospace_font(font_path, char_width, size_hint=max(int(row_height), 4))
-    # La police à chasse fixe peut donner un caractère un peu plus étroit ou
-    # large que prévu selon sa taille entière la plus proche : on réajuste
-    # la largeur de colonne sur la vraie mesure de la police choisie.
-    char_width = font.getlength("M") or char_width
+    line_spacing = 1.3
+    final_doc_state = timeline[-1]["doc_state"]
+
+    # Mise en page façon journal : 3 colonnes plutôt qu'une seule pleine
+    # largeur, pour beaucoup moins de blanc et une police plus grande.
+    physical_columns = 3
+    column_gap_px = 50
+    column_width_px = (available_w - (physical_columns - 1) * column_gap_px) / physical_columns
+
+    # La taille de police et le nombre de lignes par colonne se déterminent
+    # l'un l'autre : plus la police est petite, plus de texte tient par
+    # ligne, donc moins de lignes par colonne sont nécessaires en hauteur,
+    # donc la police pourrait être plus grande... On fait converger les
+    # deux ensemble, sur la version la plus longue atteinte répartie sur
+    # les 3 colonnes, pour utiliser toute la largeur ET toute la hauteur
+    # sans jamais déborder. Le retour à la ligne lui-même se fait toujours
+    # avec la largeur RÉELLE en pixels des mots (voir layout_rows), jamais
+    # en comptant des caractères, pour ne jamais déborder sur la colonne
+    # voisine à cause d'un glyphe plus large que prévu (accents, « »,
+    # tirets, etc.).
+    font_size = 24
+    for _ in range(8):
+        probe_font = ImageFont.truetype(font_path, font_size)
+        total_rows_guess = len(layout_rows(final_doc_state, probe_font, column_width_px)) or 1
+        rows_per_column_guess = max(1, -(-total_rows_guess // physical_columns))  # ceil
+        needed_size = max(4, int((available_h / rows_per_column_guess) / line_spacing))
+        if needed_size == font_size:
+            break
+        font_size = needed_size
+
+    font = ImageFont.truetype(font_path, font_size)
+    row_height = font_size * line_spacing
+
+    all_rows = [layout_rows(point["doc_state"], font, column_width_px) for point in timeline]
+    total_rows = max((len(rows) for rows in all_rows), default=1) or 1
+    rows_per_column = max(1, -(-total_rows // physical_columns))  # ceil
+    # Au cas où le nombre réel de lignes (sur tout l'historique, pas
+    # seulement la version finale) dépasserait légèrement l'estimation : on
+    # retasse une dernière fois l'espacement pour que ça rentre.
+    row_height = min(row_height, available_h / rows_per_column)
     header_font = ImageFont.truetype(font_path, 34)
     sub_font = ImageFont.truetype(font_path, 18)
 
@@ -488,7 +575,8 @@ def render(
     all_frames = [
         render_frame_image(
             point, rows, frame_width, frame_height, margin_x, text_top,
-            char_width, row_height, font, header_font, sub_font,
+            row_height, font, header_font, sub_font,
+            physical_columns, column_width_px, column_gap_px, rows_per_column,
         )
         for point, rows in zip(timeline, all_rows)
     ]
@@ -533,7 +621,6 @@ def main() -> None:
     parser.add_argument("--output", default=None, type=Path, help="Forcer le fichier de sortie (.gif ou .mp4)")
     parser.add_argument("--hold-frames", type=int, default=12, help="Images tenues par commit (vitesse)")
     parser.add_argument("--fps", type=int, default=20, help="Images par seconde de la vidéo finale")
-    parser.add_argument("--columns", type=int, default=PAGE_COLUMNS, help="Largeur de page en caractères (retour à la ligne)")
     parser.add_argument("--max-commits", type=int, default=None, help="Limiter aux N derniers commits touchant le fichier")
     args = parser.parse_args()
 
@@ -554,7 +641,6 @@ def main() -> None:
         output,
         hold_frames=args.hold_frames,
         fps=args.fps,
-        columns=args.columns,
     )
     print(f"Animation écrite dans {output}")
 
